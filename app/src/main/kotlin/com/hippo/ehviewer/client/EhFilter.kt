@@ -59,4 +59,5 @@ object EhFilter : CoroutineScope {
     suspend fun filterTagNamespace(info: GalleryInfo) = info.simpleTags?.any { tag -> anyActive(FilterMode.TAG_NAMESPACE) { matchTagNamespace(tag, it.text.lowercase()) } } == true
     suspend fun filterCommenter(commenter: String) = anyActive(FilterMode.COMMENTER) { it.text == commenter }
     suspend fun filterComment(comment: String) = anyActive(FilterMode.COMMENT) { regex(it).containsMatchIn(comment) }
+    suspend fun filterFav(info: GalleryInfo) = anyActive(FilterMode.TITLE) { it.text.contains("已收藏", true) } && info.favoriteSlot != -2
 }
