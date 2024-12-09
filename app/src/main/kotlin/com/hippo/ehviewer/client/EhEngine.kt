@@ -456,6 +456,7 @@ object EhEngine {
             }
             if (!needApi) it.generateSLang()
         }
+        if (filter) removeAllSuspend { filterFav(it) }
     }
 
     suspend fun addFavorites(galleryList: List<Pair<Long, String>>, dstCat: Int) {
