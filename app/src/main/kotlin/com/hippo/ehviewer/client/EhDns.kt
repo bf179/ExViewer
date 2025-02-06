@@ -93,7 +93,7 @@ val systemDns = if (isAtLeastQ) AsyncDns.toDns(AndroidAsyncDns.IPv4, AndroidAsyn
 object EhDns : Dns {
     override fun lookup(hostname: String): List<InetAddress> = when {
         (hostname in echEnabledDomains && Settings.enableECH) ->
-            EhDoH.lookup(hostname) ?: systemDns.lookup("$hostname$CFSUFFIX")
+            EhDoH.lookup("$hostname$CFSUFFIX") ?: systemDns.lookup("$hostname$CFSUFFIX")
         (hostname in "exhentai.org" && Settings.dF) ->
             builtInHosts[hostname] ?: systemDns.lookup("s.exhentai.org$CFSUFFIX")
         (hostname in cloudflaredDomains) ->
