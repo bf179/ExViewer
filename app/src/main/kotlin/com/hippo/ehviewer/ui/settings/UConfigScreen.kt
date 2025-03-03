@@ -24,12 +24,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import arrow.atomic.Atomic
 import arrow.atomic.value
 import com.google.accompanist.web.AccompanistWebViewClient
 import com.google.accompanist.web.WebView
 import com.google.accompanist.web.rememberWebViewState
 import com.hippo.ehviewer.EhApplication.Companion.nonH2OkHttpClient
+import com.hippo.ehviewer.R
 import com.hippo.ehviewer.client.EhCookieStore
 import com.hippo.ehviewer.client.EhUrl
 import com.hippo.ehviewer.ui.Screen
@@ -185,7 +187,7 @@ fun AnimatedVisibilityScope.UConfigScreen(navigator: DestinationsNavigator) = Sc
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(text = uConfig) },
+                title = { Text(text = stringResource(id = R.string.u_config)) },
                 navigationIcon = {
                     IconButton(onClick = { navigator.popBackStack() }) {
                         Icon(imageVector = Icons.AutoMirrored.Default.ArrowBack, contentDescription = null)
@@ -220,6 +222,7 @@ fun AnimatedVisibilityScope.UConfigScreen(navigator: DestinationsNavigator) = Sc
             factory = { WebView(it).apply { webview = this } },
             client = okHttpWebViewClient,
         )
+        val applyTip = stringResource(id = R.string.apply_tip)
         LaunchedEffect(Unit) { snackbarHostState.showSnackbar(applyTip) }
         DisposableEffect(Unit) {
             onDispose {

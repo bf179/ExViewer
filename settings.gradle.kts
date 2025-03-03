@@ -16,15 +16,15 @@ dependencyResolutionManagement {
 }
 
 plugins {
-    id("com.android.settings") version "8.8.0"
+    id("com.android.settings") version "8.8.2"
 }
 
 android {
     compileSdk = 35
     minSdk = 26
     targetSdk = 35
-    ndkVersion = "27.2.12479018"
-    buildToolsVersion = "35.0.0"
+    ndkVersion = "28.0.13004108"
+    buildToolsVersion = "35.0.1"
 }
 
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")

@@ -106,6 +106,7 @@ import com.hippo.ehviewer.ui.main.plus
 import com.hippo.ehviewer.ui.navToReader
 import com.hippo.ehviewer.ui.showMoveDownloadLabelList
 import com.hippo.ehviewer.ui.tools.Await
+import com.hippo.ehviewer.ui.tools.DialogState
 import com.hippo.ehviewer.ui.tools.EmptyWindowInsets
 import com.hippo.ehviewer.ui.tools.FastScrollLazyColumn
 import com.hippo.ehviewer.ui.tools.FastScrollLazyVerticalStaggeredGrid
@@ -289,6 +290,7 @@ fun AnimatedVisibilityScope.DownloadsScreen(navigator: DestinationsNavigator) = 
             },
         )
 
+        val dialogState by rememberUpdatedState(implicit<DialogState>())
         val labelsListState = rememberLazyListState()
         val editEnable = DownloadsFilterMode.CUSTOM == filterMode
         val hapticFeedback = rememberHapticFeedback()
@@ -310,12 +312,11 @@ fun AnimatedVisibilityScope.DownloadsScreen(navigator: DestinationsNavigator) = 
                         switchLabel("")
                         closeSheet()
                     },
-                    tonalElevation = 1.dp,
                     shadowElevation = 1.dp,
                     headlineContent = {
                         Text("$allName [$totalCount]")
                     },
-                    colors = listItemOnDrawerColor(),
+                    colors = listItemOnDrawerColor(filterState.label == ""),
                 )
             }
             item {
@@ -324,12 +325,11 @@ fun AnimatedVisibilityScope.DownloadsScreen(navigator: DestinationsNavigator) = 
                         switchLabel(null)
                         closeSheet()
                     },
-                    tonalElevation = 1.dp,
                     shadowElevation = 1.dp,
                     headlineContent = {
                         Text("$emptyLabelName [${downloadsCount.getOrDefault(null, 0)}]")
                     },
-                    colors = listItemOnDrawerColor(),
+                    colors = listItemOnDrawerColor(filterState.label == null),
                 )
             }
 
@@ -337,12 +337,13 @@ fun AnimatedVisibilityScope.DownloadsScreen(navigator: DestinationsNavigator) = 
                 val index by rememberUpdatedState(itemIndex)
                 val item by rememberUpdatedState(label)
                 // Not using rememberSwipeToDismissBoxState to prevent LazyColumn from reusing it
+                // SQLite may reuse ROWIDs from previously deleted rows so they'll have the same key
                 val dismissState = remember { SwipeToDismissBoxState(SwipeToDismissBoxValue.Settled, density) }
                 LaunchedEffect(dismissState) {
                     snapshotFlow { dismissState.currentValue }.collect {
                         if (it == SwipeToDismissBoxValue.EndToStart) {
                             runCatching {
-                                awaitConfirmationOrCancel(confirmText = R.string.delete) {
+                                dialogState.awaitConfirmationOrCancel(confirmText = R.string.delete) {
                                     Text(text = stringResource(R.string.delete_label, item))
                                 }
                             }.onSuccess {
@@ -382,7 +383,6 @@ fun AnimatedVisibilityScope.DownloadsScreen(navigator: DestinationsNavigator) = 
                                 switchLabel(item)
                                 closeSheet()
                             },
-                            tonalElevation = 1.dp,
                             shadowElevation = elevation,
                             headlineContent = {
                                 val name = if (filterMode == DownloadsFilterMode.ARTIST) getTranslation(label) else label
@@ -434,7 +434,7 @@ fun AnimatedVisibilityScope.DownloadsScreen(navigator: DestinationsNavigator) = 
                                     }
                                 }
                             },
-                            colors = listItemOnDrawerColor(),
+                            colors = listItemOnDrawerColor(filterState.label == item),
                         )
                     }
                 }

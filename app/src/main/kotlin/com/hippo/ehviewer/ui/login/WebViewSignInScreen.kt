@@ -8,7 +8,6 @@ import android.webkit.WebView
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import com.google.accompanist.web.AccompanistWebViewClient
@@ -141,9 +140,6 @@ fun AnimatedVisibilityScope.WebViewSignInScreen(navigator: DestinationsNavigator
             handler(webView, url, formData)
         }
     }
-    SideEffect {
-        EhUtils.signOut()
-    }
     val okHttpWebViewClient = remember {
         OkHttpWebViewClient(
             jsCode = jsCode,
@@ -256,6 +252,7 @@ fun AnimatedVisibilityScope.WebViewSignInScreen(navigator: DestinationsNavigator
         state = state,
         modifier = Modifier.fillMaxSize(),
         onCreated = { webView ->
+            EhUtils.signOut()
             webView.setDefaultSettings()
             webView.settings.javaScriptEnabled = true
             webView.addJavascriptInterface(
