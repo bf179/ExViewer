@@ -34,6 +34,7 @@ val builtInDoHUrls = listOf(
     "https://1.1.1.1/dns-query",
     "https://1.0.0.1/dns-query",
     "https://wikimedia-dns.org/dns-query",
+    "https://odvr.nic.cz/dns-query",
 )
 
 val builtInCensoredDoHUrls = listOf(
