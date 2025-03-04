@@ -1,3 +1,5 @@
+@file:Suppress("UnusedImport")
+
 package com.hippo.ehviewer.ui.settings
 
 import android.annotation.SuppressLint
@@ -30,7 +32,7 @@ import arrow.atomic.value
 import com.google.accompanist.web.AccompanistWebViewClient
 import com.google.accompanist.web.WebView
 import com.google.accompanist.web.rememberWebViewState
-import com.hippo.ehviewer.EhApplication.Companion.nonH2OkHttpClient
+import com.hippo.ehviewer.EhApplication.Companion.nonCacheOkHttpClient
 import com.hippo.ehviewer.R
 import com.hippo.ehviewer.client.EhCookieStore
 import com.hippo.ehviewer.client.EhUrl
@@ -40,6 +42,8 @@ import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import java.io.IOException
+import kotlin.getValue
+import kotlin.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -108,7 +112,7 @@ fun AnimatedVisibilityScope.UConfigScreen(navigator: DestinationsNavigator) = Sc
                 .build()
 
             return try {
-                val response = nonH2OkHttpClient.newCall(okHttpRequest).execute()
+                val response = nonCacheOkHttpClient.newCall(okHttpRequest).execute()
                 if (response.isSuccessful) {
                     // Log.d("shouldInterceptRequest", response.headers.toString())
                     val contentTypeValue = response.header("Content-Type") ?: "text/html"
@@ -118,7 +122,8 @@ fun AnimatedVisibilityScope.UConfigScreen(navigator: DestinationsNavigator) = Sc
                         response.header("Content-Encoding") ?: "utf-8",
                         response.body.byteStream(),
                     ).apply {
-                        setStatusCodeAndReasonPhrase(response.code, response.message)
+                        val reasonPhrase = response.message.takeIf { it.isNotBlank() } ?: "OK"
+                        setStatusCodeAndReasonPhrase(response.code, reasonPhrase)
                     }
                 } else {
                     response.body.close()
@@ -159,7 +164,7 @@ fun AnimatedVisibilityScope.UConfigScreen(navigator: DestinationsNavigator) = Sc
         scope.launch {
             try {
                 val response = withContext(Dispatchers.IO) {
-                    nonH2OkHttpClient.newCall(request).execute()
+                    nonCacheOkHttpClient.newCall(request).execute()
                 }
 
                 if (response.isSuccessful) {

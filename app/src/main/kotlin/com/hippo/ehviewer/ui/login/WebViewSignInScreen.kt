@@ -13,8 +13,7 @@ import androidx.compose.ui.Modifier
 import com.google.accompanist.web.AccompanistWebViewClient
 import com.google.accompanist.web.WebView
 import com.google.accompanist.web.rememberWebViewState
-import com.hippo.ehviewer.EhApplication
-import com.hippo.ehviewer.EhApplication.Companion.nonH2OkHttpClient
+import com.hippo.ehviewer.EhApplication.Companion.nonCacheOkHttpClient
 import com.hippo.ehviewer.client.EhCookieStore
 import com.hippo.ehviewer.client.EhUrl
 import com.hippo.ehviewer.client.EhUtils
@@ -31,12 +30,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.Cookie
 import okhttp3.FormBody
-import okhttp3.Interceptor
 import okhttp3.Request
-import okhttp3.Response
 import org.json.JSONObject
-
-var okHttpClient = EhApplication.nonCacheOkHttpClient
 
 private val jsCode = """
 (function() {
@@ -82,19 +77,6 @@ fun AnimatedVisibilityScope.WebViewSignInScreen(navigator: DestinationsNavigator
             ) {
                 return null
             }
-            val h2okHttpClient = okHttpClient.newBuilder().build()
-            val h2Interceptor = object : Interceptor {
-                override fun intercept(chain: Interceptor.Chain): Response {
-                    val request = chain.request()
-                    val selectedClient = if (request.url.host == "forums.e-hentai.org") {
-                        nonH2OkHttpClient
-                    } else {
-                        h2okHttpClient
-                    }
-                    return selectedClient.newCall(request).execute()
-                }
-            }
-            okHttpClient = okHttpClient.newBuilder().addInterceptor(h2Interceptor).build()
             val okHttpRequest = Request.Builder()
                 .url(url)
                 .addHeader("Referer", EhUrl.URL_SIGN_IN)
@@ -102,14 +84,15 @@ fun AnimatedVisibilityScope.WebViewSignInScreen(navigator: DestinationsNavigator
                 .build()
 
             return try {
-                val response = okHttpClient.newCall(okHttpRequest).execute()
+                val response = nonCacheOkHttpClient.newCall(okHttpRequest).execute()
                 if (response.isSuccessful) {
                     WebResourceResponse(
                         response.header("Content-Type") ?: "text/plain",
                         response.header("Content-Encoding") ?: "utf-8",
                         response.body.byteStream(),
                     ).apply {
-                        setStatusCodeAndReasonPhrase(response.code, response.message)
+                        val reasonPhrase = response.message.takeIf { it.isNotBlank() } ?: "OK"
+                        setStatusCodeAndReasonPhrase(response.code, reasonPhrase)
                     }
                 } else {
                     response.body.close()
@@ -146,8 +129,6 @@ fun AnimatedVisibilityScope.WebViewSignInScreen(navigator: DestinationsNavigator
         )
     }
     fun handlePostRequest(webView: WebView, url: String, formData: String) {
-        val okHttpClient = okHttpClient.newBuilder().build()
-
         val formBodyBuilder = FormBody.Builder()
         val formFields = JSONObject(formData)
         formFields.keys().forEach {
@@ -214,7 +195,7 @@ fun AnimatedVisibilityScope.WebViewSignInScreen(navigator: DestinationsNavigator
         launch {
             try {
                 val response = withContext(Dispatchers.IO) {
-                    okHttpClient.newCall(request).execute()
+                    nonCacheOkHttpClient.newCall(request).execute()
                 }
 
                 if (response.isSuccessful) {
