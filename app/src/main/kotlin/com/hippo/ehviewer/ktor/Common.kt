@@ -24,7 +24,7 @@ fun <T : HttpClientEngineConfig> HttpClientConfig<T>.configureCommon(redirect: B
     }
     install(HttpTimeout) {
         reset()
-        requestTimeoutMillis = 10_000
+        connectTimeoutMillis = 10_000
     }
     install(UserAgent) {
         agent = CHROME_USER_AGENT
