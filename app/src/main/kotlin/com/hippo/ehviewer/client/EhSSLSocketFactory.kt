@@ -35,7 +35,7 @@ import org.conscrypt.Conscrypt.getEchConfigList
 import org.conscrypt.Conscrypt.setCheckDnsForEch
 import org.conscrypt.Conscrypt.setEchConfigList
 
-private const val EXCEPTIONAL_DOMAIN = "hath.network"
+const val EXCEPTIONAL_DOMAIN = "hath.network"
 private val sslSocketFactory: SSLSocketFactory = SSLContext.getInstance("TLS", Conscrypt.newProvider()).apply {
     init(null, null, null)
 }.socketFactory

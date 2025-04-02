@@ -4,6 +4,7 @@ import com.hippo.ehviewer.Settings
 import com.hippo.ehviewer.builtInHosts
 import com.hippo.ehviewer.ui.settings.EhDoH
 import com.hippo.ehviewer.util.isAtLeastQ
+import java.net.Inet4Address
 import java.net.InetAddress
 import okhttp3.AsyncDns
 import okhttp3.Dns
@@ -94,6 +95,9 @@ object EhDns : Dns {
             EhDoH.lookup(hostname) ?: builtInHosts[hostname] ?: systemDns.lookup("$hostname$CFSUFFIX")
         (hostname in dohSkipDomains) ->
             systemDns.lookup(hostname)
+        (EXCEPTIONAL_DOMAIN in hostname) ->
+            (EhDoH.lookup(hostname) ?: systemDns.lookup(hostname))
+                .filterIsInstance<Inet4Address>()
         else ->
             EhDoH.lookup(hostname) ?: builtInHosts[hostname] ?: systemDns.lookup(hostname)
     }.shuffled()
