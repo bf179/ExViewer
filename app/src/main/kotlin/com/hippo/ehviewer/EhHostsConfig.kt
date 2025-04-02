@@ -23,8 +23,8 @@ val builtInHosts = hostsDsl {
         "140.82.114.6" blockedInCN false
         "140.82.116.5" blockedInCN false
         "140.82.116.6" blockedInCN false
-        "140.82.121.5" blockedInCN false
-        "140.82.121.6" blockedInCN false
+        "140.82.121.5" blockedInCN true
+        "140.82.121.6" blockedInCN true
         "20.200.245.245" blockedInCN false
         "20.201.28.148" blockedInCN false
         "20.205.243.168" blockedInCN false
@@ -37,8 +37,8 @@ val builtInHosts = hostsDsl {
         "140.82.113.4" blockedInCN false
         "140.82.114.3" blockedInCN false
         "140.82.116.4" blockedInCN false
-        "140.82.121.3" blockedInCN false
-        "140.82.121.4" blockedInCN false
+        "140.82.121.3" blockedInCN true
+        "140.82.121.4" blockedInCN true
         "20.200.245.247" blockedInCN false
         "20.201.28.151" blockedInCN false
         "20.205.243.166" blockedInCN false
