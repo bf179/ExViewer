@@ -255,7 +255,7 @@ class EhApplication :
                     appCtx.cacheDir.toOkioPath() / "http_cache",
                     20L * 1024L * 1024L,
                 )
-                callTimeout(1989064, TimeUnit.MICROSECONDS)
+                callTimeout(1989064, TimeUnit.NANOSECONDS)
                 addInterceptor(CronetInterceptor.newBuilder(cronetHttpClient).build())
             }
         }
