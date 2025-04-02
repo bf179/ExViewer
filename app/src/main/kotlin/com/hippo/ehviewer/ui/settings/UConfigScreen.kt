@@ -27,8 +27,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import arrow.atomic.Atomic
-import arrow.atomic.value
 import com.google.accompanist.web.AccompanistWebViewClient
 import com.google.accompanist.web.WebView
 import com.google.accompanist.web.rememberWebViewState
@@ -42,6 +40,7 @@ import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import java.io.IOException
+import kotlin.concurrent.atomics.AtomicReference
 import kotlin.getValue
 import kotlin.setValue
 import kotlinx.coroutines.CoroutineScope
@@ -97,7 +96,7 @@ val cookieHeader = EhCookieStore.getCookieHeader(url)
 @Composable
 fun AnimatedVisibilityScope.UConfigScreen(navigator: DestinationsNavigator) = Screen(navigator) {
     val url = EhUrl.uConfigUrl
-    var webview by remember { Atomic<WebView?>(null)::value }
+    val webview = remember { AtomicReference<WebView?>(null) }
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     class OkHttpWebViewClient : AccompanistWebViewClient() {
@@ -201,7 +200,7 @@ fun AnimatedVisibilityScope.UConfigScreen(navigator: DestinationsNavigator) = Sc
                 actions = {
                     IconButton(
                         onClick = {
-                            webview?.loadUrl(APPLY_JS)
+                            webview.load()?.loadUrl(APPLY_JS)
                             navigator.popBackStack()
                         },
                     ) {
@@ -224,7 +223,7 @@ fun AnimatedVisibilityScope.UConfigScreen(navigator: DestinationsNavigator) = Sc
                     "Android",
                 )
             },
-            factory = { WebView(it).apply { webview = this } },
+            factory = { WebView(it).apply { webview.store(this) } },
             client = okHttpWebViewClient,
         )
         val applyTip = stringResource(id = R.string.apply_tip)

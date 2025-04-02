@@ -285,6 +285,7 @@ kotlin {
             "androidx.compose.animation.ExperimentalSharedTransitionApi",
             "androidx.paging.ExperimentalPagingApi",
             "kotlin.ExperimentalStdlibApi",
+            "kotlin.concurrent.atomics.ExperimentalAtomicApi",
             "kotlin.contracts.ExperimentalContracts",
             "kotlinx.coroutines.ExperimentalCoroutinesApi",
             "kotlinx.coroutines.FlowPreview",
@@ -297,6 +298,7 @@ kotlin {
             "-Xcontext-receivers",
             "-Xwhen-guards",
             "-Xsuppress-warning=CONTEXT_RECEIVERS_DEPRECATED",
+            "-Xannotation-default-target=param-property",
         )
     }
 }
