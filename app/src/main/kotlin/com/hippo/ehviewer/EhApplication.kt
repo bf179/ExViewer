@@ -29,8 +29,7 @@ import coil3.asImage
 import coil3.gif.AnimatedImageDecoder
 import coil3.gif.GifDecoder
 import coil3.network.ConnectivityChecker
-import coil3.network.NetworkFetcher
-import coil3.network.ktor3.asNetworkClient
+import coil3.network.ktor3.KtorNetworkFetcherFactory
 import coil3.request.ErrorResult
 import coil3.request.ImageRequest
 import coil3.request.allowRgb565
@@ -49,8 +48,6 @@ import com.hippo.ehviewer.coil.HardwareBitmapInterceptor
 import com.hippo.ehviewer.coil.MapExtraInfoInterceptor
 import com.hippo.ehviewer.coil.MergeInterceptor
 import com.hippo.ehviewer.coil.QrCodeInterceptor
-import com.hippo.ehviewer.coil.exchangeSite
-import com.hippo.ehviewer.coil.limitConcurrency
 import com.hippo.ehviewer.cronet.cronetHttpClient
 import com.hippo.ehviewer.dailycheck.checkDawn
 import com.hippo.ehviewer.dao.SearchDatabase
@@ -90,7 +87,6 @@ import logcat.AndroidLogcatLogger
 import logcat.LogPriority
 import logcat.LogcatLogger
 import logcat.asLog
-import okhttp3.Protocol
 import okio.Path.Companion.toOkioPath
 import org.xbill.DNS.config.AndroidResolverConfigProvider
 import splitties.arch.room.roomDb
@@ -178,8 +174,8 @@ class EhApplication :
         components {
             serviceLoaderEnabled(false)
             add(
-                NetworkFetcher.Factory(
-                    networkClient = { ktorClient.asNetworkClient().limitConcurrency().exchangeSite() },
+                KtorNetworkFetcherFactory(
+                    httpClient = { ktorClient },
                     connectivityChecker = { ConnectivityChecker.ONLINE },
                 ),
             )
@@ -249,10 +245,6 @@ class EhApplication :
             }
         }
 
-        val nonH2OkHttpClient = nonCacheOkHttpClient.newBuilder()
-            .protocols(listOf(Protocol.HTTP_3, Protocol.HTTP_1_1))
-            .build()
-
         // Never use this okhttp client to download large blobs!!!
         val okHttpClient by lazy {
             httpClient(nonCacheOkHttpClient) {
@@ -260,7 +252,7 @@ class EhApplication :
                     appCtx.cacheDir.toOkioPath() / "http_cache",
                     20L * 1024L * 1024L,
                 )
-                callTimeout(1989064, TimeUnit.MICROSECONDS)
+                callTimeout(1989064, TimeUnit.NANOSECONDS)
                 addInterceptor(CronetInterceptor.newBuilder(cronetHttpClient).build())
             }
         }

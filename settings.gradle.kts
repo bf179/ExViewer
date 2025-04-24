@@ -11,20 +11,19 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven("https://s01.oss.sonatype.org/content/repositories/snapshots/")
     }
 }
 
 plugins {
-    id("com.android.settings") version "8.8.0"
+    id("com.android.settings") version "8.9.1"
 }
 
 android {
-    compileSdk = 35
+    compileSdk = 36
     minSdk = 26
-    targetSdk = 35
-    ndkVersion = "27.2.12479018"
-    buildToolsVersion = "35.0.0"
+    targetSdk = 36
+    ndkVersion = "28.0.13004108"
+    buildToolsVersion = "36.0.0"
 }
 
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")

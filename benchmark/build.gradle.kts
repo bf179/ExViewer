@@ -1,5 +1,3 @@
-import com.android.build.api.dsl.ManagedVirtualDevice
-
 plugins {
     alias(libs.plugins.android.test)
     alias(libs.plugins.kotlin.android)
@@ -8,7 +6,6 @@ plugins {
 
 android {
     namespace = "com.ehviewer.baselineprofile"
-    compileSdk = 35
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
@@ -20,9 +17,6 @@ android {
     }
 
     defaultConfig {
-        minSdk = 28
-        targetSdk = 35
-
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

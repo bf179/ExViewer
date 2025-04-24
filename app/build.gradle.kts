@@ -94,11 +94,6 @@ android {
             }
             debugSymbolLevel = "FULL"
         }
-        externalNativeBuild {
-            cmake {
-                arguments += "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
-            }
-        }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -249,7 +244,7 @@ dependencies {
     implementation(libs.bundles.coil)
 
     implementation(libs.telephoto.zoomable)
-    implementation(libs.lyricist)
+
     implementation(libs.ktor.client.okhttp)
 
     implementation(libs.bundles.kotlinx.serialization)
@@ -290,6 +285,7 @@ kotlin {
             "androidx.compose.animation.ExperimentalSharedTransitionApi",
             "androidx.paging.ExperimentalPagingApi",
             "kotlin.ExperimentalStdlibApi",
+            "kotlin.concurrent.atomics.ExperimentalAtomicApi",
             "kotlin.contracts.ExperimentalContracts",
             "kotlinx.coroutines.ExperimentalCoroutinesApi",
             "kotlinx.coroutines.FlowPreview",
@@ -302,6 +298,7 @@ kotlin {
             "-Xcontext-receivers",
             "-Xwhen-guards",
             "-Xsuppress-warning=CONTEXT_RECEIVERS_DEPRECATED",
+            "-Xannotation-default-target=param-property",
         )
     }
 }

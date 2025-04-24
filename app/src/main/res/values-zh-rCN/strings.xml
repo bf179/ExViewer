@@ -300,8 +300,6 @@
     <string name="settings_eh_detail_size_long">长</string>
     <string name="settings_eh_detail_size_short">短</string>
     <string name="settings_eh_thumb_columns">缩略图列数</string>
-    <string name="settings_eh_force_eh_thumb">使用 e-hentai 缩略图服务器</string>
-    <string name="settings_eh_force_eh_thumb_summary">若缩略图加载失败可尝试关闭此项</string>
     <string name="settings_eh_show_jpn_title">显示日文标题</string>
     <string name="settings_eh_show_jpn_title_summary">需同时在 EHentai 网站设置中启用 Japanese Title</string>
     <string name="settings_eh_show_gallery_pages">显示画廊页数</string>
@@ -456,7 +454,8 @@
     <string name="download_start_all_reversed">全部开始（倒序）</string>
     <string name="settings_download_download_delay">下载延时</string>
     <string name="settings_download_download_delay_summary">每次下载延时 %s 毫秒</string>
-    <string name="settings_download_download_timeout">下载超时（秒）</string>
+    <string name="settings_download_connection_timeout">连接超时（秒）</string>
+    <string name="settings_download_timeout_speed">最低响应速度（KB/s）</string>
     <string name="no_browser_installed">请安装一个浏览器。</string>
     <string name="toplist_alltime">从始至终</string>
     <string name="toplist_pastyear">过去一年</string>

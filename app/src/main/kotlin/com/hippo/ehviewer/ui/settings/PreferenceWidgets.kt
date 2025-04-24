@@ -3,6 +3,7 @@ package com.hippo.ehviewer.ui.settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.annotation.ArrayRes
+import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -29,9 +30,9 @@ import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.integerArrayResource
 import androidx.compose.ui.res.stringArrayResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
-import arrow.atomic.Atomic
 import com.hippo.ehviewer.ui.openBrowser
 import com.hippo.ehviewer.ui.settings.PreferenceTokens.PreferenceTextPadding
 import com.hippo.ehviewer.util.ProgressDialog
@@ -42,6 +43,7 @@ import com.jamal.composeprefs3.ui.prefs.SwitchPref
 import com.jamal.composeprefs3.ui.prefs.TextPref
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import com.ramcosta.composedestinations.spec.DirectionDestinationSpec
+import kotlin.concurrent.atomics.AtomicReference
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 import kotlin.math.roundToInt
@@ -60,7 +62,7 @@ object PreferenceTokens {
 @Composable
 fun PreferenceHeader(
     icon: Painter,
-    title: String,
+    @StringRes title: Int,
     childRoute: DirectionDestinationSpec,
     navigator: DestinationsNavigator,
 ) {
@@ -71,14 +73,14 @@ fun PreferenceHeader(
         Spacer(modifier = Modifier.size(PreferenceTokens.PreferenceIconPadding))
         Icon(painter = icon, contentDescription = null, modifier = Modifier.size(PreferenceTokens.PreferenceIconSize), tint = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.size(PreferenceTokens.PreferenceIconPadding))
-        Text(text = title, modifier = Modifier.padding(PreferenceTextPadding), style = MaterialTheme.typography.bodyLarge)
+        Text(text = stringResource(id = title), modifier = Modifier.padding(PreferenceTextPadding), style = MaterialTheme.typography.bodyLarge)
     }
 }
 
 @Composable
 fun PreferenceHeader(
     icon: ImageVector,
-    title: String,
+    @StringRes title: Int,
     childRoute: DirectionDestinationSpec,
     navigator: DestinationsNavigator,
 ) = PreferenceHeader(
@@ -150,8 +152,8 @@ fun WorkPreference(title: String, summary: String? = null, work: suspend Corouti
 @Composable
 fun <I, O> LauncherPreference(title: String, summary: String? = null, contract: ActivityResultContract<I, O>, key: I, work: suspend CoroutineScope.(O) -> Unit) {
     val coroutineScope = rememberCoroutineScope { Dispatchers.IO }
-    val callback = remember { Atomic<(O) -> Unit> {} }
-    val launcher = rememberLauncherForActivityResult(contract = contract) { callback.getAndSet { }.invoke(it) }
+    val callback = remember { AtomicReference<(O) -> Unit> {} }
+    val launcher = rememberLauncherForActivityResult(contract = contract) { callback.exchange { }.invoke(it) }
     var completed by remember { mutableStateOf(true) }
     if (!completed) {
         ProgressDialog()
@@ -159,7 +161,7 @@ fun <I, O> LauncherPreference(title: String, summary: String? = null, contract: 
     Preference(title = title, summary = summary) {
         coroutineScope.launch {
             val o = suspendCoroutine { cont ->
-                callback.set { cont.resume(it) }
+                callback.store { cont.resume(it) }
                 launcher.launch(key)
             }
             completed = false

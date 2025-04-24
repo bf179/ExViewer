@@ -315,8 +315,6 @@
     <string name="settings_eh_detail_size_long">Long</string>
     <string name="settings_eh_detail_size_short">Short</string>
     <string name="settings_eh_thumb_columns">Thumb columns</string>
-    <string name="settings_eh_force_eh_thumb">Use e-hentai thumbnail server</string>
-    <string name="settings_eh_force_eh_thumb_summary">Try disabling this if you have trouble loading thumbnails</string>
     <string name="settings_eh_show_jpn_title">Show Japanese title</string>
     <string name="settings_eh_show_jpn_title_summary">Require enabling Japanese Title in Settings on EHentai website</string>
     <string name="settings_eh_show_gallery_pages">Show gallery pages</string>
@@ -345,7 +343,8 @@
     <string name="settings_download_concurrency_summary">Up to %s images</string>
     <string name="settings_download_download_delay">Download delay</string>
     <string name="settings_download_download_delay_summary">Delay %s ms per download</string>
-    <string name="settings_download_download_timeout">Download timeout (in seconds)</string>
+    <string name="settings_download_connection_timeout">Connection timeout (in seconds)</string>
+    <string name="settings_download_timeout_speed">Minimum response speed (in KB/s)</string>
     <string name="settings_download_preload_image">Preload image</string>
     <string name="settings_download_preload_image_summary">Preload next %s image</string>
     <string name="settings_download_download_origin_image">Download original image</string>
