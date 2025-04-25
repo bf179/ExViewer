@@ -456,7 +456,31 @@ object EhEngine {
             }
             if (!needApi) it.generateSLang()
         }
-        if (filter) removeAllSuspend { filterFav(it) }
+        // if (filter) removeAllSuspend { filterFav(it) }
+        // 仅在过滤后剩余数量 ≥4 时才执行 filterFav
+        // if (filter && isNotEmpty()) { // 确保列表非空
+        //     val tempList = toList() // 创建不可变副本进行测试过滤
+        //     val filteredCount = tempList.count { !filterFav(it) } // 计算过滤后剩余数量
+        //     if (filteredCount >= 4) { // 如果过滤后仍有 ≥4 项，才真正执行过滤
+        //         removeAllSuspend { filterFav(it) }
+        //     }
+        //     // 否则跳过 filterFav 过滤
+        // }
+        // 避免遗留过多 (40个以上)
+        if (filter && isNotEmpty()) { // 确保列表非空
+            val tempList = toList() // 创建不可变副本进行测试过滤
+            val filteredCount = tempList.count { !filterFav(it) } // 计算过滤后剩余数量
+            val keepCount = 2 // 需要保留的元素数量，可以为3
+            // 如果过滤后剩余数量小于2，计算需要保留的元素数量
+            if (filteredCount < keepCount) {
+                val itemsToKeep = tempList.take(keepCount) // 保留前2个元素
+                val itemsToFilterOut = tempList.subtract(itemsToKeep) // 找到需要过滤的元素
+                removeAllSuspend { itemsToFilterOut.contains(it) && filterFav(it) } // 过滤剩余的元素时同时检查filterFav条件(fix)
+            } else {
+                // 如果过滤后仍有 ≥ 2 项，才完全执行过滤
+                removeAllSuspend { filterFav(it) }
+            }
+        }
     }
 
     suspend fun addFavorites(galleryList: List<Pair<Long, String>>, dstCat: Int) {
