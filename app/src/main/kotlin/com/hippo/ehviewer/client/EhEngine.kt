@@ -22,6 +22,7 @@ import arrow.core.right
 import arrow.fx.coroutines.parMap
 import arrow.fx.coroutines.parZip
 import com.hippo.ehviewer.EhDB
+import com.hippo.ehviewer.ExlApiRequest
 import com.hippo.ehviewer.R
 import com.hippo.ehviewer.Settings
 import com.hippo.ehviewer.client.data.BaseGalleryInfo
@@ -54,6 +55,7 @@ import com.hippo.ehviewer.client.parser.VoteCommentResult
 import com.hippo.ehviewer.client.parser.VoteTagParser
 import com.hippo.ehviewer.dailycheck.showEventNotification
 import com.hippo.ehviewer.dailycheck.today
+import com.hippo.ehviewer.sendExlApiRequest
 import com.hippo.ehviewer.util.AppConfig
 import com.hippo.ehviewer.util.ReadableTime
 import com.hippo.ehviewer.util.bodyAsUtf8Text
@@ -301,6 +303,18 @@ object EhEngine {
                 append("update", "1")
             }
         }.executeSafely { }
+        val sapi = Settings.sapiUrl
+        if (!sapi.isNullOrBlank()) {
+            // 向 API 发送 POST 请求
+            val exlar = ExlApiRequest(
+                user = "loliwant",
+                gid = gid,
+                token = token,
+                favoriteslot = dstCat,
+                op = catStr,
+            )
+            sendExlApiRequest(exlar, sapi)
+        }
     }
 
     suspend fun getFavoriteNote(gid: Long, token: String) = ehRequest(EhUrl.getAddFavorites(gid, token), EhUrl.getGalleryDetailUrl(gid, token))

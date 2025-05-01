@@ -193,6 +193,21 @@ fun AnimatedVisibilityScope.AdvancedScreen(navigator: DestinationsNavigator) = S
                 useSelectedAsSummary = true,
                 entries = languages,
             )
+            var sapiUrl by Settings::sapiUrl.observed
+            Preference(
+                title = "SAPI",
+                summary = sapiUrl ?: "Not set",
+            ) {
+                coroutineScope.launch {
+                    val newSapiUrl = awaitInputText(
+                        initial = sapiUrl ?: "",
+                        title = "Set SAPI Endpoint",
+                        hint = "https://api.example.com/exlocal",
+                    )
+                    // 空字符串转为 null 存储
+                    sapiUrl = newSapiUrl.ifBlank { null }
+                }
+            }
             var enableCronet by Settings::enableQuic.observed
             var enableDf by Settings::dF.observed
             SwitchPreference(

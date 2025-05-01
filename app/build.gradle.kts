@@ -77,12 +77,12 @@ android {
     val chromeVersion = rootProject.layout.projectDirectory.file("chrome.version").asFile.readText().trim()
 
     defaultConfig {
-        applicationId = "moe.tarsin.ehviewer"
+        applicationId = "moe.tarsin.ehviefav"
         minSdk = 26
         targetSdk = 35
         versionCode = 180062
         versionName = "1.13.1"
-        versionNameSuffix = "-cc"
+        versionNameSuffix = "-sf"
         buildConfigField("String", "RAW_VERSION_NAME", "\"$versionName${versionNameSuffix.orEmpty()}\"")
         buildConfigField("String", "COMMIT_SHA", "\"$commitSha\"")
         buildConfigField("long", "COMMIT_TIME", commitTime)

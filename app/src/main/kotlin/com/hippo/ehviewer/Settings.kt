@@ -178,6 +178,7 @@ object Settings : DataStorePreferences(null) {
     var recentToplist by stringPref("recent_toplist", "11")
     var defaultDownloadLabel by stringOrNullPref("default_download_label", null)
     var dohUrl by stringOrNullPref("doh_url", null)
+    var sapiUrl by stringOrNullPref("sapi_url", null)
     var cloudflareIp by stringOrNullPref("cloudflare_ip", "cdn.sstatic.net")
     var cloudflareIpOverride by boolPref("cloudflare_ip_override", false)
     var enableECH by boolPref("enable_ech", false)

@@ -14,11 +14,14 @@
  * limitations under the License.
  */
 package com.hippo.ehviewer
-
 import android.content.Context
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import android.widget.Toast
 import arrow.fx.coroutines.resource
 import arrow.fx.coroutines.resourceScope
+import com.hippo.ehviewer.Settings
 import com.hippo.ehviewer.client.data.BaseGalleryInfo
 import com.hippo.ehviewer.dao.DownloadArtist
 import com.hippo.ehviewer.dao.DownloadDirname
@@ -33,10 +36,52 @@ import com.hippo.ehviewer.dao.QuickSearch
 import com.hippo.ehviewer.dao.Schema17to18
 import com.hippo.ehviewer.download.DownloadManager
 import com.hippo.ehviewer.util.sendTo
+import io.ktor.client.HttpClient
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
+import io.ktor.http.HttpMethod
+import io.ktor.http.content.TextContent
 import kotlinx.coroutines.flow.Flow
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import okio.Path
 import okio.Path.Companion.toOkioPath
 import splitties.arch.room.roomDb
+import splitties.init.appCtx
+
+@Serializable
+data class ExlApiRequest(
+    val user: String,
+    val gid: Long,
+    val token: String,
+    var favoriteslot: Int,
+    val op: String,
+)
+
+// 全局 Toast 工具函数
+fun showToastOnMainThread(message: String) {
+    Handler(Looper.getMainLooper()).post {
+        Toast.makeText(appCtx, message, Toast.LENGTH_LONG).show()
+    }
+}
+
+suspend fun sendExlApiRequest(exlapirequest: ExlApiRequest, sapi: String) {
+    HttpClient().use { client ->
+        // 发送POST请求
+        try {
+            val response = HttpClient().post(sapi) {
+                method = HttpMethod.Post
+                val request = exlapirequest
+                val json = Json.encodeToString(request)
+                setBody(TextContent(text = json, contentType = ContentType.Application.Json))
+            }
+        } catch (e: Exception) {
+            showToastOnMainThread("Failed to call API: ${e.message}")
+        }
+    }
+}
 
 object EhDB {
     private const val DB_NAME = "eh.db"
@@ -55,6 +100,13 @@ object EhDB {
     suspend fun updateGalleryInfo(galleryInfoList: List<BaseGalleryInfo>) {
         db.galleryDao().update(galleryInfoList)
     }
+
+    // 全局 Toast 工具函数
+    // private fun showToastOnMainThread(message: String) {
+    //     Handler(Looper.getMainLooper()).post {
+    //         Toast.makeText(appCtx, message, Toast.LENGTH_LONG).show()
+    //     }
+    // }
 
     fun getReadProgressFlow(gid: Long) = db.progressDao().getPageFlow(gid)
     suspend fun getReadProgress(gid: Long) = db.progressDao().getPage(gid)
@@ -157,6 +209,35 @@ object EhDB {
     suspend fun removeLocalFavorites(galleryInfo: BaseGalleryInfo) {
         db.localFavoritesDao().deleteByKey(galleryInfo.gid)
         deleteGalleryInfo(galleryInfo)
+        val sapi = Settings.sapiUrl
+        if (!sapi.isNullOrBlank()) {
+            // 向 API 发送 POST 请求
+            val exlar = ExlApiRequest(
+                user = "loliwant",
+                gid = galleryInfo.gid,
+                token = galleryInfo.token,
+                favoriteslot = galleryInfo.favoriteSlot,
+                op = "del",
+            )
+            sendExlApiRequest(exlar, sapi)
+            // try {
+            //     // 发送POST请求
+            //     val response = HttpClient().post(sapi) {
+            //         method = HttpMethod.Post
+            //         val request = ExlApiRequest(
+            //             user = "loliwant",
+            //             gid = galleryInfo.gid,
+            //             token = galleryInfo.token,
+            //             favoriteslot = galleryInfo.favoriteSlot,
+            //             op = "del",
+            //         )
+            //         val json = Json.encodeToString(request)
+            //         setBody(TextContent(text = json, contentType = ContentType.Application.Json))
+            //     }
+            // } catch (e: Exception) {
+            //     showToastOnMainThread("Failed to call API: ${e.message}")
+            // }
+        }
     }
 
     suspend fun removeLocalFavorites(galleryInfoList: Collection<BaseGalleryInfo>) {
@@ -173,6 +254,35 @@ object EhDB {
     suspend fun putLocalFavorites(galleryInfo: BaseGalleryInfo) {
         putGalleryInfo(galleryInfo)
         db.localFavoritesDao().upsert(LocalFavoriteInfo(galleryInfo.gid))
+        val sapi = Settings.sapiUrl
+        if (!sapi.isNullOrBlank()) {
+            // 向 API 发送 POST 请求
+            val exlar = ExlApiRequest(
+                user = "loliwant",
+                gid = galleryInfo.gid,
+                token = galleryInfo.token,
+                favoriteslot = galleryInfo.favoriteSlot,
+                op = "add",
+            )
+            sendExlApiRequest(exlar, sapi)
+            // try {
+            //     // 发送POST请求
+            //     val response = HttpClient().post(sapi) {
+            //         method = HttpMethod.Post
+            //         val request = ExlApiRequest(
+            //             user = "loliwant",
+            //             gid = galleryInfo.gid,
+            //             token = galleryInfo.token,
+            //             favoriteslot = galleryInfo.favoriteSlot,
+            //             op = "add",
+            //         )
+            //         val json = Json.encodeToString(request)
+            //         setBody(TextContent(text = json, contentType = ContentType.Application.Json))
+            //     }
+            // } catch (e: Exception) {
+            //     showToastOnMainThread("Failed to call API: ${e.message}")
+            // }
+        }
     }
 
     suspend fun putLocalFavorites(galleryInfoList: Collection<BaseGalleryInfo>) {
