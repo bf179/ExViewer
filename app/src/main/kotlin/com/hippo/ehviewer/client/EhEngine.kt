@@ -303,17 +303,20 @@ object EhEngine {
                 append("update", "1")
             }
         }.executeSafely { }
-        val sapi = Settings.sapiUrl
-        if (!sapi.isNullOrBlank()) {
-            // 向 API 发送 POST 请求
-            val exlar = ExlApiRequest(
-                user = "loliwant",
-                gid = gid,
-                token = token,
-                favoriteslot = dstCat,
-                op = catStr,
-            )
-            sendExlApiRequest(exlar, sapi)
+        val syncfav = Settings.syncFav
+        if (syncfav) {
+            val sapi = Settings.sapiUrl
+            if (!sapi.isNullOrBlank()) {
+                // 向 API 发送 POST 请求
+                val exlar = ExlApiRequest(
+                    user = "loliwant",
+                    gid = gid,
+                    token = token,
+                    favoriteslot = dstCat,
+                    op = catStr,
+                )
+                sendExlApiRequest(exlar, sapi)
+            }
         }
     }
 

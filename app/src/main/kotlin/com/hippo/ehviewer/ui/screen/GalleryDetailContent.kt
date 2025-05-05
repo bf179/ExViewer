@@ -67,6 +67,7 @@ import arrow.core.partially1
 import arrow.fx.coroutines.parMap
 import arrow.fx.coroutines.parZip
 import com.hippo.ehviewer.EhDB
+import com.hippo.ehviewer.PqApiRequest
 import com.hippo.ehviewer.R
 import com.hippo.ehviewer.Settings
 import com.hippo.ehviewer.client.EhEngine
@@ -98,6 +99,7 @@ import com.hippo.ehviewer.icons.EhIcons
 import com.hippo.ehviewer.icons.filled.Magnet
 import com.hippo.ehviewer.ktbuilder.executeIn
 import com.hippo.ehviewer.ktbuilder.imageRequest
+import com.hippo.ehviewer.sendPqApiRequest
 import com.hippo.ehviewer.ui.GalleryInfoBottomSheet
 import com.hippo.ehviewer.ui.MainActivity
 import com.hippo.ehviewer.ui.confirmRemoveDownload
@@ -732,6 +734,21 @@ fun BelowHeader(galleryDetail: GalleryDetail, voteTag: VoteTag) {
                             awaitConfirmationOrCancel { Text(text = stringResource(R.string.filter_the_tag, tag)) }
                             Filter(FilterMode.TAG, tag).remember()
                             showSnackbar(filterAdded)
+                        }
+                        val papi = Settings.papiUrl
+                        if (!papi.isNullOrBlank()) {
+                            val addToPriorityQueue = "添加至优先队列"
+                            onSelect(addToPriorityQueue) {
+                                awaitConfirmationOrCancel {
+                                    Text(text = "添加 \"$tag\" 到优先队列?")
+                                }
+                                val pqar = PqApiRequest(
+                                    user = "loliwant",
+                                    itype = "tag",
+                                    icontent = tag,
+                                )
+                                sendPqApiRequest(pqar, papi)
+                            }
                         }
                         if (galleryDetail.apiUid >= 0) {
                             when (vote) {

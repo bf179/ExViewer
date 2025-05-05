@@ -198,19 +198,42 @@ fun AnimatedVisibilityScope.AdvancedScreen(navigator: DestinationsNavigator) = S
                 useSelectedAsSummary = true,
                 entries = languages,
             )
+            SwitchPreference(
+                title = "[Self] 同步收藏变动到云端",
+                summary = "仅在sapi不为空时有效",
+                value = Settings::syncFav,
+            )
+            var showSapi by Settings::syncFav.observed
             var sapiUrl by Settings::sapiUrl.observed
+            AnimatedVisibility(visible = showSapi) {
+                Preference(
+                    title = "SAPI",
+                    summary = sapiUrl ?: "Not set",
+                ) {
+                    coroutineScope.launch {
+                        val newSapiUrl = awaitInputText(
+                            initial = sapiUrl ?: "",
+                            title = "Set SAPI Endpoint",
+                            hint = "https://api.example.com/exlocal",
+                        )
+                        // 空字符串转为 null 存储
+                        sapiUrl = newSapiUrl.ifBlank { null }
+                    }
+                }
+            }
+            var papiUrl by Settings::papiUrl.observed
             Preference(
-                title = "SAPI",
-                summary = sapiUrl ?: "Not set",
+                title = "PAPI",
+                summary = papiUrl ?: "Not set",
             ) {
                 coroutineScope.launch {
-                    val newSapiUrl = awaitInputText(
-                        initial = sapiUrl ?: "",
-                        title = "Set SAPI Endpoint",
-                        hint = "https://api.example.com/exlocal",
+                    val newPapiUrl = awaitInputText(
+                        initial = papiUrl ?: "",
+                        title = "Set PAPI Endpoint",
+                        hint = "https://api.example.com/pq",
                     )
                     // 空字符串转为 null 存储
-                    sapiUrl = newSapiUrl.ifBlank { null }
+                    papiUrl = newPapiUrl.ifBlank { null }
                 }
             }
             var enableCronet by Settings::enableQuic.observed

@@ -36,6 +36,7 @@ import androidx.compose.ui.util.fastJoinToString
 import androidx.lifecycle.viewModelScope
 import com.hippo.ehviewer.EhApplication.Companion.imageCache
 import com.hippo.ehviewer.EhDB
+import com.hippo.ehviewer.PqApiRequest
 import com.hippo.ehviewer.R
 import com.hippo.ehviewer.Settings
 import com.hippo.ehviewer.client.EhEngine
@@ -51,6 +52,7 @@ import com.hippo.ehviewer.dao.DownloadInfo
 import com.hippo.ehviewer.download.DownloadManager
 import com.hippo.ehviewer.ktbuilder.executeIn
 import com.hippo.ehviewer.ktbuilder.imageRequest
+import com.hippo.ehviewer.sendPqApiRequest
 import com.hippo.ehviewer.spider.SpiderDen
 import com.hippo.ehviewer.ui.MainActivity
 import com.hippo.ehviewer.ui.Screen
@@ -229,6 +231,26 @@ fun AnimatedVisibilityScope.GalleryDetailScreen(args: GalleryDetailScreenArgs, n
                                 getDetailError = ""
                             },
                         )
+                        // 在 papi 已设置时显示 "添加到优先队列"
+                        val papi = Settings.papiUrl
+                        if (!papi.isNullOrBlank()) {
+                            DropdownMenuItem(
+                                text = { Text("添加到优先队列") },
+                                onClick = {
+                                    dropdown = false // 关闭菜单
+                                    launchIO {
+                                        val ginfo = galleryInfo!!
+                                        val icontent = "${ginfo.gid}_${ginfo.token}"
+                                        val pqar = PqApiRequest(
+                                            user = "loliwant",
+                                            itype = "gallery",
+                                            icontent = icontent,
+                                        )
+                                        sendPqApiRequest(pqar, papi)
+                                    }
+                                },
+                            )
+                        }
                         val imageCacheClear = stringResource(R.string.image_cache_cleared)
                         DropdownMenuItem(
                             text = { Text(text = stringResource(id = R.string.clear_image_cache)) },

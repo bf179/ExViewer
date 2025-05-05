@@ -60,6 +60,13 @@ data class ExlApiRequest(
     val op: String,
 )
 
+@Serializable
+data class PqApiRequest(
+    val user: String,
+    val itype: String,
+    val icontent: String,
+)
+
 // 全局 Toast 工具函数
 fun showToastOnMainThread(message: String) {
     Handler(Looper.getMainLooper()).post {
@@ -78,7 +85,23 @@ suspend fun sendExlApiRequest(exlapirequest: ExlApiRequest, sapi: String) {
                 setBody(TextContent(text = json, contentType = ContentType.Application.Json))
             }
         } catch (e: Exception) {
-            showToastOnMainThread("Failed to call API: ${e.message}")
+            showToastOnMainThread("Failed to call SAPI: ${e.message}")
+        }
+    }
+}
+
+suspend fun sendPqApiRequest(pqapirequest: PqApiRequest, papi: String) {
+    HttpClient().use { client ->
+        // 发送POST请求
+        try {
+            val response = HttpClient().post(papi) {
+                method = HttpMethod.Post
+                val request = pqapirequest
+                val json = Json.encodeToString(request)
+                setBody(TextContent(text = json, contentType = ContentType.Application.Json))
+            }
+        } catch (e: Exception) {
+            showToastOnMainThread("Failed to call PAPI: ${e.message}")
         }
     }
 }
@@ -209,34 +232,37 @@ object EhDB {
     suspend fun removeLocalFavorites(galleryInfo: BaseGalleryInfo) {
         db.localFavoritesDao().deleteByKey(galleryInfo.gid)
         deleteGalleryInfo(galleryInfo)
-        val sapi = Settings.sapiUrl
-        if (!sapi.isNullOrBlank()) {
-            // 向 API 发送 POST 请求
-            val exlar = ExlApiRequest(
-                user = "loliwant",
-                gid = galleryInfo.gid,
-                token = galleryInfo.token,
-                favoriteslot = galleryInfo.favoriteSlot,
-                op = "del",
-            )
-            sendExlApiRequest(exlar, sapi)
-            // try {
-            //     // 发送POST请求
-            //     val response = HttpClient().post(sapi) {
-            //         method = HttpMethod.Post
-            //         val request = ExlApiRequest(
-            //             user = "loliwant",
-            //             gid = galleryInfo.gid,
-            //             token = galleryInfo.token,
-            //             favoriteslot = galleryInfo.favoriteSlot,
-            //             op = "del",
-            //         )
-            //         val json = Json.encodeToString(request)
-            //         setBody(TextContent(text = json, contentType = ContentType.Application.Json))
-            //     }
-            // } catch (e: Exception) {
-            //     showToastOnMainThread("Failed to call API: ${e.message}")
-            // }
+        val syncfav = Settings.syncFav
+        if (syncfav) {
+            val sapi = Settings.sapiUrl
+            if (!sapi.isNullOrBlank()) {
+                // 向 API 发送 POST 请求
+                val exlar = ExlApiRequest(
+                    user = "loliwant",
+                    gid = galleryInfo.gid,
+                    token = galleryInfo.token,
+                    favoriteslot = galleryInfo.favoriteSlot,
+                    op = "del",
+                )
+                sendExlApiRequest(exlar, sapi)
+                // try {
+                //     // 发送POST请求
+                //     val response = HttpClient().post(sapi) {
+                //         method = HttpMethod.Post
+                //         val request = ExlApiRequest(
+                //             user = "loliwant",
+                //             gid = galleryInfo.gid,
+                //             token = galleryInfo.token,
+                //             favoriteslot = galleryInfo.favoriteSlot,
+                //             op = "del",
+                //         )
+                //         val json = Json.encodeToString(request)
+                //         setBody(TextContent(text = json, contentType = ContentType.Application.Json))
+                //     }
+                // } catch (e: Exception) {
+                //     showToastOnMainThread("Failed to call API: ${e.message}")
+                // }
+            }
         }
     }
 
@@ -254,34 +280,37 @@ object EhDB {
     suspend fun putLocalFavorites(galleryInfo: BaseGalleryInfo) {
         putGalleryInfo(galleryInfo)
         db.localFavoritesDao().upsert(LocalFavoriteInfo(galleryInfo.gid))
-        val sapi = Settings.sapiUrl
-        if (!sapi.isNullOrBlank()) {
-            // 向 API 发送 POST 请求
-            val exlar = ExlApiRequest(
-                user = "loliwant",
-                gid = galleryInfo.gid,
-                token = galleryInfo.token,
-                favoriteslot = galleryInfo.favoriteSlot,
-                op = "add",
-            )
-            sendExlApiRequest(exlar, sapi)
-            // try {
-            //     // 发送POST请求
-            //     val response = HttpClient().post(sapi) {
-            //         method = HttpMethod.Post
-            //         val request = ExlApiRequest(
-            //             user = "loliwant",
-            //             gid = galleryInfo.gid,
-            //             token = galleryInfo.token,
-            //             favoriteslot = galleryInfo.favoriteSlot,
-            //             op = "add",
-            //         )
-            //         val json = Json.encodeToString(request)
-            //         setBody(TextContent(text = json, contentType = ContentType.Application.Json))
-            //     }
-            // } catch (e: Exception) {
-            //     showToastOnMainThread("Failed to call API: ${e.message}")
-            // }
+        val syncfav = Settings.syncFav
+        if (syncfav) {
+            val sapi = Settings.sapiUrl
+            if (!sapi.isNullOrBlank()) {
+                // 向 API 发送 POST 请求
+                val exlar = ExlApiRequest(
+                    user = "loliwant",
+                    gid = galleryInfo.gid,
+                    token = galleryInfo.token,
+                    favoriteslot = galleryInfo.favoriteSlot,
+                    op = "add",
+                )
+                sendExlApiRequest(exlar, sapi)
+                // try {
+                //     // 发送POST请求
+                //     val response = HttpClient().post(sapi) {
+                //         method = HttpMethod.Post
+                //         val request = ExlApiRequest(
+                //             user = "loliwant",
+                //             gid = galleryInfo.gid,
+                //             token = galleryInfo.token,
+                //             favoriteslot = galleryInfo.favoriteSlot,
+                //             op = "add",
+                //         )
+                //         val json = Json.encodeToString(request)
+                //         setBody(TextContent(text = json, contentType = ContentType.Application.Json))
+                //     }
+                // } catch (e: Exception) {
+                //     showToastOnMainThread("Failed to call API: ${e.message}")
+                // }
+            }
         }
     }
 
