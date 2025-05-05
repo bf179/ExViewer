@@ -179,6 +179,7 @@ object Settings : DataStorePreferences(null) {
     var defaultDownloadLabel by stringOrNullPref("default_download_label", null)
     var dohUrl by stringOrNullPref("doh_url", null)
     var sapiUrl by stringOrNullPref("sapi_url", null)
+    var hideFav by boolPref("hide_fav", true)
     var cloudflareIp by stringOrNullPref("cloudflare_ip", "cdn.sstatic.net")
     var cloudflareIpOverride by boolPref("cloudflare_ip_override", false)
     var enableECH by boolPref("enable_ech", false)

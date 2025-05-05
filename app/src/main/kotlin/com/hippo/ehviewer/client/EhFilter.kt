@@ -2,6 +2,7 @@ package com.hippo.ehviewer.client
 
 import arrow.core.memoize
 import com.hippo.ehviewer.EhDB
+import com.hippo.ehviewer.Settings
 import com.hippo.ehviewer.client.data.GalleryInfo
 import com.hippo.ehviewer.dao.Filter
 import com.hippo.ehviewer.dao.FilterMode
@@ -59,5 +60,10 @@ object EhFilter : CoroutineScope {
     suspend fun filterTagNamespace(info: GalleryInfo) = info.simpleTags?.any { tag -> anyActive(FilterMode.TAG_NAMESPACE) { matchTagNamespace(tag, it.text.lowercase()) } } == true
     suspend fun filterCommenter(commenter: String) = anyActive(FilterMode.COMMENTER) { it.text == commenter }
     suspend fun filterComment(comment: String) = anyActive(FilterMode.COMMENT) { regex(it).containsMatchIn(comment) }
-    suspend fun filterFav(info: GalleryInfo) = anyActive(FilterMode.TITLE) { it.text.contains("已收藏", true) } && info.favoriteSlot != -2
+
+    // suspend fun filterFav(info: GalleryInfo) = anyActive(FilterMode.TITLE) { it.text.contains("已收藏", true) } && info.favoriteSlot != -2
+    suspend fun filterFav(info: GalleryInfo): Boolean {
+        val hidefav = Settings.hideFav
+        return hidefav && info.favoriteSlot != -2
+    }
 }

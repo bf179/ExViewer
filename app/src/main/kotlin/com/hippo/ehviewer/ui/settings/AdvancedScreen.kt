@@ -137,6 +137,11 @@ fun AnimatedVisibilityScope.AdvancedScreen(navigator: DestinationsNavigator) = S
                 }
             }
             SwitchPreference(
+                title = "[Self] 隐藏已收藏画廊",
+                summary = "从搜索列表中隐藏已经收藏的画廊",
+                value = Settings::hideFav,
+            )
+            SwitchPreference(
                 title = stringResource(id = R.string.settings_advanced_save_crash_log),
                 summary = stringResource(id = R.string.settings_advanced_save_crash_log_summary),
                 value = Settings::saveCrashLog,
