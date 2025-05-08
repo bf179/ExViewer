@@ -280,6 +280,7 @@
     <string name="filter_uploader">Uploader</string>
     <string name="filter_tag">Tag</string>
     <string name="filter_tag_namespace">Tag namespace</string>
+    <string name="filter_tag_group">Tag group</string>
     <string name="filter_commenter">Commenter</string>
     <string name="filter_comment">Comment Regex</string>
     <string name="delete_filter">Delete blocker \"%s\"?</string>

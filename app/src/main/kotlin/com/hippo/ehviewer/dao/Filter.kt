@@ -28,6 +28,7 @@ enum class FilterMode(val field: Int) {
     TAG_NAMESPACE(3),
     COMMENTER(4),
     COMMENT(5),
+    TAG_GROUP(6),
 }
 
 class FilterModeConverter {

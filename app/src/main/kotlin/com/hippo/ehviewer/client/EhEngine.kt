@@ -498,6 +498,21 @@ object EhEngine {
                 removeAllSuspend { filterFav(it) }
             }
         }
+        // 标签组过滤
+        if (filter && isNotEmpty()) { // 确保列表非空
+            val tempListg = toList() // 创建不可变副本进行测试过滤
+            val filteredCountg = tempListg.count { !filterTagGroup(it) } // 计算过滤后剩余数量
+            val keepCountg = 2 // 需要保留的元素数量，可以为3
+            // 如果过滤后剩余数量小于2，计算需要保留的元素数量
+            if (filteredCountg < keepCountg) {
+                val itemsToKeepg = tempListg.take(keepCountg) // 保留前2个元素
+                val itemsToFilterOutg = tempListg.subtract(itemsToKeepg) // 找到需要过滤的元素
+                removeAllSuspend { itemsToFilterOutg.contains(it) && filterTagGroup(it) } // 过滤剩余的元素时同时检查filterTagGroup条件(fix)
+            } else {
+                // 如果过滤后仍有 ≥ 2 项，才完全执行过滤
+                removeAllSuspend { filterTagGroup(it) }
+            }
+        }
     }
 
     suspend fun addFavorites(galleryList: List<Pair<Long, String>>, dstCat: Int) {

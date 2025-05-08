@@ -66,4 +66,18 @@ object EhFilter : CoroutineScope {
         val hidefav = Settings.hideFav
         return hidefav && info.favoriteSlot != -2
     }
+
+    // 标签组屏蔽
+    suspend fun filterTagGroup(info: GalleryInfo) = anyActive(FilterMode.TAG_GROUP) { tagGroupFilter ->
+        // 将标签组文本按逗号分割并处理
+        val requiredTags = tagGroupFilter.text.split(',')
+            .map { it.trim().lowercase() }
+            .filter { it.isNotEmpty() }
+        // 检查画廊是否包含该组中的所有标签
+        requiredTags.all { requiredTag ->
+            info.simpleTags?.any { galleryTag ->
+                matchTag(galleryTag.lowercase(), requiredTag)
+            } ?: false
+        }
+    }
 }

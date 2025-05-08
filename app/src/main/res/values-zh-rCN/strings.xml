@@ -264,6 +264,7 @@
     <string name="filter_uploader">上传者</string>
     <string name="filter_tag">标签</string>
     <string name="filter_tag_namespace">标签组</string>
+    <string name="filter_tag_group">多标签</string>
     <string name="filter_commenter">评论者</string>
     <string name="filter_comment">评论</string>
     <string name="delete_filter">删除屏蔽项“%s”？</string>
