@@ -37,6 +37,7 @@ import com.hippo.ehviewer.dao.Schema17to18
 import com.hippo.ehviewer.download.DownloadManager
 import com.hippo.ehviewer.util.sendTo
 import io.ktor.client.HttpClient
+import io.ktor.client.call.body
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
@@ -78,11 +79,35 @@ suspend fun sendExlApiRequest(exlapirequest: ExlApiRequest, sapi: String) {
     HttpClient().use { client ->
         // 发送POST请求
         try {
-            val response = HttpClient().post(sapi) {
+            val response = client.post(sapi) {
                 method = HttpMethod.Post
                 val request = exlapirequest
                 val json = Json.encodeToString(request)
                 setBody(TextContent(text = json, contentType = ContentType.Application.Json))
+            }
+            // 解析响应内容
+            val responseBody: String = response.body()
+            val jsonResponse = Json.decodeFromString<Map<String, String>>(responseBody)
+
+            when (response.status.value) {
+                201 -> { // 成功
+                    jsonResponse["message"]?.let { message ->
+                        showToastOnMainThread(message)
+                    } ?: showToastOnMainThread("Operation completed successfully")
+                }
+                400 -> { // 客户端错误
+                    jsonResponse["error"]?.let { error ->
+                        showToastOnMainThread("Bad request: $error")
+                    } ?: showToastOnMainThread("Invalid request format")
+                }
+                500 -> { // 服务器错误
+                    jsonResponse["error"]?.let { error ->
+                        showToastOnMainThread("Server error: $error")
+                    } ?: showToastOnMainThread("Internal server error")
+                }
+                else -> { // 其他状态码
+                    showToastOnMainThread("Unexpected response: ${response.status}")
+                }
             }
         } catch (e: Exception) {
             showToastOnMainThread("Failed to call SAPI: ${e.message}")
@@ -94,11 +119,35 @@ suspend fun sendPqApiRequest(pqapirequest: PqApiRequest, papi: String) {
     HttpClient().use { client ->
         // 发送POST请求
         try {
-            val response = HttpClient().post(papi) {
+            val response = client.post(papi) {
                 method = HttpMethod.Post
                 val request = pqapirequest
                 val json = Json.encodeToString(request)
                 setBody(TextContent(text = json, contentType = ContentType.Application.Json))
+            }
+            // 解析响应内容
+            val responseBody: String = response.body()
+            val jsonResponse = Json.decodeFromString<Map<String, String>>(responseBody)
+
+            when (response.status.value) {
+                201 -> { // 成功
+                    jsonResponse["message"]?.let { message ->
+                        showToastOnMainThread(message)
+                    } ?: showToastOnMainThread("Operation completed successfully")
+                }
+                400 -> { // 客户端错误
+                    jsonResponse["error"]?.let { error ->
+                        showToastOnMainThread("Bad request: $error")
+                    } ?: showToastOnMainThread("Invalid request format")
+                }
+                500 -> { // 服务器错误
+                    jsonResponse["error"]?.let { error ->
+                        showToastOnMainThread("Server error: $error")
+                    } ?: showToastOnMainThread("Internal server error")
+                }
+                else -> { // 其他状态码
+                    showToastOnMainThread("Unexpected response: ${response.status}")
+                }
             }
         } catch (e: Exception) {
             showToastOnMainThread("Failed to call PAPI: ${e.message}")
