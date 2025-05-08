@@ -224,9 +224,9 @@ fun AnimatedVisibilityScope.FilterScreen(navigator: DestinationsNavigator) = Scr
                         FilterMode.UPLOADER -> R.string.filter_uploader
                         FilterMode.TAG -> R.string.filter_tag
                         FilterMode.TAG_NAMESPACE -> R.string.filter_tag_namespace
-                        FilterMode.TAG_GROUP -> R.string.filter_tag_group
                         FilterMode.COMMENTER -> R.string.filter_commenter
                         FilterMode.COMMENT -> R.string.filter_comment
+                        FilterMode.TAG_GROUP -> R.string.filter_tag_group
                     }
                     if (filters.isNotEmpty()) {
                         item(key = filterMode) {
