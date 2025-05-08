@@ -163,6 +163,7 @@
         <item>@string/filter_tag_namespace</item>
         <item>@string/filter_commenter</item>
         <item>@string/filter_comment</item>
+        <item>@string/filter_tag_group</item>
     </string-array>
 
     <string-array name="tag_translation_metadata">
