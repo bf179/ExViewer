@@ -68,12 +68,26 @@ data class PqApiRequest(
     val icontent: String,
 )
 
-// 全局 Toast 工具函数
+// 保持一个全局的 Toast 引用
+private var currentToast: Toast? = null
+
 fun showToastOnMainThread(message: String) {
     Handler(Looper.getMainLooper()).post {
-        Toast.makeText(appCtx, message, Toast.LENGTH_LONG).show()
+        // 取消前一个 Toast
+        currentToast?.cancel()
+        // 创建并显示新的 Toast
+        currentToast = Toast.makeText(appCtx, message, Toast.LENGTH_SHORT).apply {
+            show()
+        }
     }
 }
+
+// 全局 Toast 工具函数
+// fun showToastOnMainThread(message: String) {
+//     Handler(Looper.getMainLooper()).post {
+//         Toast.makeText(appCtx, message, Toast.LENGTH_SHORT).show()
+//     }
+// }
 
 suspend fun sendExlApiRequest(exlapirequest: ExlApiRequest, sapi: String) {
     HttpClient().use { client ->
