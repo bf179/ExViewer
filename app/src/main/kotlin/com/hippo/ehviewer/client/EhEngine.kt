@@ -525,7 +525,7 @@ object EhEngine {
         otherFilterCount += (initialCount - beforefavCount)
         otherFilterCount += (afterfavCount - finalCount)
         val favFilterCount = (beforefavCount - afterfavCount)
-        if (debugFilter) {
+        if (debugFilter && (favFilterCount != 0 || otherFilterCount != 0)) {
             showToastOnMainThread("Fav filter: $favFilterCount | Oth filters: $otherFilterCount")
         }
     }
