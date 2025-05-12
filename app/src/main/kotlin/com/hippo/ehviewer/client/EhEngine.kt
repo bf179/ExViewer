@@ -56,6 +56,7 @@ import com.hippo.ehviewer.client.parser.VoteTagParser
 import com.hippo.ehviewer.dailycheck.showEventNotification
 import com.hippo.ehviewer.dailycheck.today
 import com.hippo.ehviewer.sendExlApiRequest
+import com.hippo.ehviewer.showToastOnMainThread
 import com.hippo.ehviewer.util.AppConfig
 import com.hippo.ehviewer.util.ReadableTime
 import com.hippo.ehviewer.util.bodyAsUtf8Text
@@ -460,6 +461,10 @@ object EhEngine {
     }.fetchUsingAsText(GalleryTokenApiParser::parse)
 
     private suspend fun MutableList<BaseGalleryInfo>.fillInfo(url: String, filter: Boolean = false) = with(EhFilter) {
+        // 初始化 debug 计数
+        var otherFilterCount = 0
+        val debugFilter = Settings.debugFilter
+        val initialCount = size
         if (filter) removeAllSuspend { filterTitle(it) || filterUploader(it) }
         val hasTags = any { !it.simpleTags.isNullOrEmpty() }
         val hasPages = any { it.pages != 0 }
@@ -473,6 +478,7 @@ object EhEngine {
             }
             if (!needApi) it.generateSLang()
         }
+        val beforefavCount = size
         // if (filter) removeAllSuspend { filterFav(it) }
         // 仅在过滤后剩余数量 ≥4 时才执行 filterFav
         // if (filter && isNotEmpty()) { // 确保列表非空
@@ -484,7 +490,8 @@ object EhEngine {
         //     // 否则跳过 filterFav 过滤
         // }
         // 避免遗留过多 (40个以上)
-        if (filter && isNotEmpty()) { // 确保列表非空
+        val hidefav = Settings.hideFav
+        if (hidefav && filter && isNotEmpty()) { // 确保列表非空
             val tempList = toList() // 创建不可变副本进行测试过滤
             val filteredCount = tempList.count { !filterFav(it) } // 计算过滤后剩余数量
             val keepCount = 2 // 需要保留的元素数量，可以为3
@@ -498,6 +505,7 @@ object EhEngine {
                 removeAllSuspend { filterFav(it) }
             }
         }
+        val afterfavCount = size
         // 标签组过滤
         if (filter && isNotEmpty()) { // 确保列表非空
             val tempListg = toList() // 创建不可变副本进行测试过滤
@@ -512,6 +520,13 @@ object EhEngine {
                 // 如果过滤后仍有 ≥ 2 项，才完全执行过滤
                 removeAllSuspend { filterTagGroup(it) }
             }
+        }
+        val finalCount = size
+        otherFilterCount += (initialCount - beforefavCount)
+        otherFilterCount += (afterfavCount - finalCount)
+        val favFilterCount = (beforefavCount - afterfavCount)
+        if (debugFilter) {
+            showToastOnMainThread("Fav filter: $favFilterCount | Oth filters: $otherFilterCount")
         }
     }
 

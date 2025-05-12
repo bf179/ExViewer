@@ -142,6 +142,11 @@ fun AnimatedVisibilityScope.AdvancedScreen(navigator: DestinationsNavigator) = S
                 value = Settings::hideFav,
             )
             SwitchPreference(
+                title = "[Self] 显示过滤信息",
+                summary = "显示被过滤的画廊数量",
+                value = Settings::debugFilter,
+            )
+            SwitchPreference(
                 title = stringResource(id = R.string.settings_advanced_save_crash_log),
                 summary = stringResource(id = R.string.settings_advanced_save_crash_log_summary),
                 value = Settings::saveCrashLog,
