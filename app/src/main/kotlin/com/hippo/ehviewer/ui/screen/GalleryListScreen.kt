@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.automirrored.filled.LastPage
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Reorder
 import androidx.compose.material.icons.filled.Shuffle
@@ -78,6 +79,7 @@ import com.hippo.ehviewer.R
 import com.hippo.ehviewer.Settings
 import com.hippo.ehviewer.asMutableState
 import com.hippo.ehviewer.client.EhEngine
+import com.hippo.ehviewer.client.EhFilter.remember
 import com.hippo.ehviewer.client.EhTagDatabase
 import com.hippo.ehviewer.client.EhUtils
 import com.hippo.ehviewer.client.data.BaseGalleryInfo
@@ -92,6 +94,8 @@ import com.hippo.ehviewer.client.data.ListUrlBuilder.Companion.MODE_WHATS_HOT
 import com.hippo.ehviewer.client.parser.GalleryDetailUrlParser
 import com.hippo.ehviewer.client.parser.GalleryPageUrlParser
 import com.hippo.ehviewer.collectAsState
+import com.hippo.ehviewer.dao.Filter
+import com.hippo.ehviewer.dao.FilterMode
 import com.hippo.ehviewer.dao.QuickSearch
 import com.hippo.ehviewer.icons.EhIcons
 import com.hippo.ehviewer.icons.filled.GoTo
@@ -281,6 +285,70 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                 title = { Text(text = stringResource(id = R.string.quick_search)) },
                 colors = topBarOnDrawerColor(),
                 actions = {
+                    val nameEmpty = stringResource(R.string.name_is_empty)
+                    // FilterAlt添加按钮
+                    IconButton(
+                        onClick = {
+                            launch {
+                                if (urlBuilder.mode == MODE_IMAGE_SEARCH) {
+                                    showSnackbar("图片不能被添加到过滤器")
+                                } else {
+                                    val input = awaitInputText(
+                                        initial = urlBuilder.keyword.orEmpty(),
+                                        title = "添加过滤器",
+                                        hint = "添加搜索框中内容到过滤器",
+                                    ) { rawInput ->
+                                        var ptext = rawInput.trim()
+                                        ensure(ptext.isNotBlank()) { nameEmpty }
+                                        ptext
+                                    } ?: return@launch // 取消输入时直接返回
+                                    val ftext = input.trim()
+                                    if (ftext.isBlank()) {
+                                        showSnackbar("输入为空")
+                                        return@launch
+                                    }
+                                    if (ftext.isNotBlank()) {
+                                        val (processedText, filterMode, modeDisplayName) = if (!('$' in ftext) && (ftext.startsWith('"') && ftext.endsWith('"'))) {
+                                            // 单标题模式
+                                            val processed = ftext.removeSurrounding("\"")
+                                            Triple(processed, FilterMode.TITLE, "标题")
+                                        } else {
+                                            // 复合标签模式
+                                            val processed = ftext.removeSuffix("$")
+                                                .replace("$ ", ",")
+                                                .replace("\" ", "\",")
+                                                .replace("p:", "parody:")
+                                                .replace("f:", "female:")
+                                                .replace("m:", "male:")
+                                                .replace("a:", "artist:")
+                                                .replace("x:", "mixed:")
+                                                .replace("o:", "other:")
+                                                .replace("l:", "language:")
+                                                .replace("g:", "group:")
+                                                .replace("c:", "character:")
+                                                .replace("cos:", "cosplayer:")
+                                            if (',' in processed) {
+                                                Triple(processed, FilterMode.TAG_GROUP, "复合标签")
+                                            } else {
+                                                if ("uploader:" in processed) {
+                                                    Triple(processed, FilterMode.UPLOADER, "上传者")
+                                                } else {
+                                                    Triple(processed, FilterMode.TAG, "单标签")
+                                                }
+                                            }
+                                        }
+                                        awaitConfirmationOrCancel {
+                                            Text(text = "屏蔽 \"$processedText\" ($modeDisplayName)?")
+                                        }
+                                        Filter(filterMode, processedText).remember()
+                                        showSnackbar("过滤项已添加")
+                                    }
+                                }
+                            }
+                        },
+                    ) {
+                        Icon(Icons.Default.FilterAlt, contentDescription = "Add filter item")
+                    }
                     IconButton(onClick = {
                         launch {
                             awaitConfirmationOrCancel(title = R.string.quick_search, showCancelButton = false) {
@@ -294,7 +362,6 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                         )
                     }
                     val invalidImageQuickSearch = stringResource(R.string.image_search_not_quick_search)
-                    val nameEmpty = stringResource(R.string.name_is_empty)
                     val dupName = stringResource(R.string.duplicate_name)
                     IconButton(
                         onClick = {
