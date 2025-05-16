@@ -65,6 +65,7 @@ import com.hippo.ehviewer.ui.tools.FastScrollLazyVerticalGrid
 import com.hippo.ehviewer.ui.tools.FastScrollLazyVerticalStaggeredGrid
 import com.hippo.ehviewer.util.displayString
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -125,6 +126,7 @@ fun GalleryList(
             is LoadState.Error -> state.error !is NoHitsFoundException
             is LoadState.NotLoading -> false
         }
+        val slowload = Settings.hideFav
         if (listMode == 0) {
             val columnWidth by collectDetailSizeAsState()
             FastScrollLazyVerticalGrid(
@@ -148,6 +150,13 @@ fun GalleryList(
                 }
                 if (showLoadStateIndicator) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
+                        // 添加延迟加载逻辑
+                        if (slowload) {
+                            LaunchedEffect(Unit) {
+                                delay(4000)
+                                data.retry()
+                            }
+                        }
                         LoadStateIndicator(state = data.loadState.append) {
                             data.retry()
                         }
@@ -178,6 +187,13 @@ fun GalleryList(
                 }
                 if (showLoadStateIndicator) {
                     item(span = StaggeredGridItemSpan.FullLine) {
+                        // 添加延迟加载逻辑
+                        if (slowload) {
+                            LaunchedEffect(Unit) {
+                                delay(4000)
+                                data.retry()
+                            }
+                        }
                         LoadStateIndicator(state = data.loadState.append) {
                             data.retry()
                         }

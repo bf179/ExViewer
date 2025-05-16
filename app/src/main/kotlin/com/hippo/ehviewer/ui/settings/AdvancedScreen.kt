@@ -251,6 +251,21 @@ fun AnimatedVisibilityScope.AdvancedScreen(navigator: DestinationsNavigator) = S
                     papiUrl = newPapiUrl.ifBlank { null }
                 }
             }
+            var addKeyword by Settings::addKeyword.observed
+            Preference(
+                title = "AddKeyword",
+                summary = addKeyword ?: "Not set",
+            ) {
+                coroutineScope.launch {
+                    val newaddKeyword = awaitInputText(
+                        initial = addKeyword ?: "",
+                        title = "设置快捷添加搜索词",
+                        hint = "keyword",
+                    )
+                    // 空字符串转为 null 存储
+                    addKeyword = newaddKeyword.ifBlank { null }
+                }
+            }
             var enableCronet by Settings::enableQuic.observed
             var enableDf by Settings::dF.observed
             SwitchPreference(

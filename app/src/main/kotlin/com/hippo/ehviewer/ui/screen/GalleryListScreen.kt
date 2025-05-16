@@ -26,6 +26,7 @@ import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.automirrored.filled.LastPage
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmarks
+import androidx.compose.material.icons.filled.Filter
 import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Reorder
@@ -749,6 +750,15 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
             urlBuilder.setRange(0)
             data.refresh()
         }
+        onClick(Icons.Default.Filter) {
+            val addkeyword = Settings.addKeyword
+            if (!addkeyword.isNullOrBlank()) {
+                urlBuilder.keyword = urlBuilder.keyword?.trim()?.let {
+                    if (it.isNotEmpty()) "$it $addkeyword" else addkeyword
+                } ?: addkeyword
+                data.refresh()
+            }
+        }
         onClick(Icons.Default.Bookmarks) {
             if (!isProcessing) {
                 isProcessing = true
@@ -758,6 +768,8 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                         awaitConfirmationOrCancel {
                             Text(text = "警告：确定要将当前已加载的 ${currentGalleryList.size} 个画廊全部收藏到默认收藏夹?")
                         }
+                        val defaultFavSlot = Settings.defaultFavSlot
+                        val slowfav = defaultFavSlot != -1
                         currentGalleryList.chunked(10).forEach { chunk ->
                             chunk.forEach { galleryInfo ->
                                 ensureActive()
@@ -766,6 +778,9 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                                     runSuspendCatching {
                                         modifyFavorites(galleryInfo)
                                     }.onSuccess { successCount++ }
+                                    if (slowfav) {
+                                        delay(4000)
+                                    }
                                     delay(100) // 每个画廊处理完延迟100毫秒
                                 } else {
                                     successCount++
@@ -773,6 +788,9 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                             }
                             ensureActive()
                             delay(200) // 每组画廊处理完延迟200毫秒
+                            if (slowfav) {
+                                delay(5000)
+                            }
                             showSnackbar("少女祈祷中 ($successCount/${currentGalleryList.size})……")
                         }
                         showSnackbar("成功收藏 $successCount/${currentGalleryList.size} 个画廊")
