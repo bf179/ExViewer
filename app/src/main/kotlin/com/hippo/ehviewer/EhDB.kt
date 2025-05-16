@@ -411,6 +411,27 @@ object EhDB {
         dao.update(quickSearchList)
     }
 
+    suspend fun getLastSearch(): QuickSearch? {
+        val dao = db.quickSearchDao()
+        return dao.getByNamePrefix("lastSearch")
+    }
+
+    suspend fun updateLastSearch(newLastSearch: QuickSearch) {
+        val dao = db.quickSearchDao()
+
+        // 1. 查找 NAME 以 "lastSearch" 开头的现有记录
+        val existing = dao.getByNamePrefix("lastSearch")
+
+        if (existing != null) {
+            // 2. 如果存在则更新（保留原ID）
+            newLastSearch.id = existing.id
+            dao.update(newLastSearch)
+        } else {
+            // 3. 如果不存在则插入新记录
+            dao.insert(newLastSearch)
+        }
+    }
+
     val historyLazyList
         get() = db.historyDao().joinListLazy()
 

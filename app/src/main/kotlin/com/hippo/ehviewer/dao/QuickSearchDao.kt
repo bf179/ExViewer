@@ -8,7 +8,7 @@ import androidx.room.Update
 
 @Dao
 interface QuickSearchDao {
-    @Query("SELECT * FROM QUICK_SEARCH ORDER BY POSITION")
+    @Query("SELECT * FROM QUICK_SEARCH WHERE NAME NOT LIKE 'lastSearch%' ORDER BY POSITION")
     suspend fun list(): List<QuickSearch>
 
     @Query("SELECT * FROM QUICK_SEARCH ORDER BY POSITION LIMIT :limit OFFSET :offset")
@@ -19,6 +19,12 @@ interface QuickSearchDao {
 
     @Update
     suspend fun update(quickSearchList: List<QuickSearch>)
+
+    @Update
+    suspend fun update(quickSearch: QuickSearch)
+
+    @Query("SELECT * FROM QUICK_SEARCH WHERE NAME LIKE :name || '%' LIMIT 1")
+    suspend fun getByNamePrefix(name: String): QuickSearch?
 
     @Insert
     suspend fun insert(quickSearch: QuickSearch): Long

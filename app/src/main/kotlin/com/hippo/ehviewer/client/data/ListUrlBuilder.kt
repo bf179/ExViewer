@@ -68,6 +68,33 @@ data class ListUrlBuilder(
             mKeyword = keyword
         }
 
+    fun withAddedKeyword(addword: String): ListUrlBuilder {
+        val currentKeyword = if (MODE_UPLOADER == mode) "uploader:$mKeyword" else mKeyword
+        var processedKeyword = currentKeyword?.trim() ?: ""
+        // 检查 :" 和 $"
+        if (!processedKeyword.contains(":\"") && !processedKeyword.contains("$\"")) {
+            // 将第一个:替换为:"，并在末尾添加$"
+            processedKeyword = processedKeyword
+                .replace("parody:", "p:")
+                .replace("female:", "f:")
+                .replace("male:", "m:")
+                .replace("artist:", "a:")
+                .replace("mixed:", "x:")
+                .replace("other:", "o:")
+                .replace("language:", "l:")
+                .replace("group:", "g:")
+                .replace("character:", "c:")
+                .replace("cosplayer:", "cos:")
+                .replaceFirst(":", ":\"")
+                .let { if (it.contains(":\"")) "$it$\"" else it }
+        }
+        val newKeyword = if (processedKeyword.isNotEmpty()) "$processedKeyword $addword" else addword
+        return this.copy(
+            mode = MODE_NORMAL,
+            mKeyword = if (MODE_UPLOADER == mode) newKeyword.removePrefix("uploader:") else newKeyword,
+        )
+    }
+
     constructor(q: QuickSearch) : this(
         mode = q.mode,
         category = q.category,

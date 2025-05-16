@@ -26,11 +26,12 @@ import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.automirrored.filled.LastPage
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmarks
-import androidx.compose.material.icons.filled.Filter
 import androidx.compose.material.icons.filled.FilterAlt
+import androidx.compose.material.icons.filled.Flight
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Reorder
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Bookmarks
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -204,6 +205,9 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
     val data = rememberInVM {
         Pager(PagingConfig(25)) {
             object : PagingSource<String, BaseGalleryInfo>() {
+                // 记录最后一次加载时间（每次创建PagingSource时初始化）
+                var lastLoadTime = 0L
+                val slowload = Settings.hideFav
                 override fun getRefreshKey(state: PagingState<String, BaseGalleryInfo>): String? = null
                 override suspend fun load(params: LoadParams<String>) = withIOContext {
                     if (urlBuilder.mode == MODE_TOPLIST) {
@@ -218,6 +222,18 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                             LoadResult.Page(result.galleryInfoList, prev?.toString(), next?.toString())
                         }
                     } else {
+                        if (slowload) {
+                            // 仅对分页加载（Append）限流
+                            if (params is LoadParams.Append) {
+                                val currentTime = System.currentTimeMillis()
+                                val elapsed = currentTime - lastLoadTime
+                                if (elapsed < 3000) { // 3秒间隔
+//                                    showSnackbar("限流 ${elapsed/1000} s")
+                                    delay(3000 - elapsed) // 动态补足剩余时间
+                                }
+                                lastLoadTime = currentTime // 更新最后加载时间
+                            }
+                        }
                         when (params) {
                             is LoadParams.Prepend -> urlBuilder.setIndex(params.key, isNext = false)
                             is LoadParams.Append -> urlBuilder.setIndex(params.key, isNext = true)
@@ -750,12 +766,47 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
             urlBuilder.setRange(0)
             data.refresh()
         }
-        onClick(Icons.Default.Filter) {
+        onClick(Icons.Default.Star) {
+            launch {
+                try {
+                    // 用于存储当前搜索状态用于快速恢复
+                    val ffirstItem = data.itemSnapshotList.items[getFirstVisibleItemIndex()]
+                    val fnext = ffirstItem.gid + 1
+                    val text = "lastSearch@$fnext"
+                    val lastSearch = urlBuilder.toQuickSearch(text)
+                    withContext(Dispatchers.IO) {
+                        EhDB.updateLastSearch(lastSearch)
+                    }
+                    showSnackbar("Quick saved successfully!")
+                } catch (e: Exception) {
+                    showSnackbar("Save failed: ${e.message}")
+                }
+            }
+        }
+        onClick(Icons.Default.Flight) {
+            launch {
+                try {
+                    val lastSearch = EhDB.getLastSearch()
+                    lastSearch?.let { search ->
+                        // 创建新的 UrlBuilder 并应用搜索条件
+                        val newBuilder = ListUrlBuilder(search).apply {
+                            language = languageFilter
+                        }
+                        // 更新全局 urlBuilder 并刷新数据
+                        urlBuilder = newBuilder
+                        data.refresh() // 触发分页数据刷新
+                    }
+                    showSnackbar("Restore last save successfully!")
+                } catch (e: Exception) {
+                    showSnackbar("Restore failed: ${e.message}")
+                }
+            }
+        }
+        onClick(Icons.Default.FilterAlt) {
             val addkeyword = Settings.addKeyword
             if (!addkeyword.isNullOrBlank()) {
-                urlBuilder.keyword = urlBuilder.keyword?.trim()?.let {
-                    if (it.isNotEmpty()) "$it $addkeyword" else addkeyword
-                } ?: addkeyword
+                val newBuilder = urlBuilder.withAddedKeyword(addkeyword)
+                urlBuilder = newBuilder
                 data.refresh()
             }
         }
@@ -795,7 +846,7 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                         }
                         showSnackbar("成功收藏 $successCount/${currentGalleryList.size} 个画廊")
                     } catch (e: CancellationException) {
-                        showSnackbar("已中止任务，成功收藏 $successCount 个画廊")
+                        showSnackbar("任务中止，已处理收藏 $successCount 个画廊")
                     } finally {
                         isProcessing = false
                         batchFavJob = null
