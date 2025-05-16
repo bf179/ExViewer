@@ -479,13 +479,18 @@ fun BelowHeader(galleryDetail: GalleryDetail, voteTag: VoteTag) {
             val addSucceed = stringResource(R.string.add_to_favorite_success)
             // val removeFailed = stringResource(R.string.remove_from_favorite_failure)
             val addFailed = stringResource(R.string.add_to_favorite_failure)
+            val quickfav = Settings.quickFav
             FilledTertiaryIconToggleButton(
                 checked = favSlot != NOT_FAVORITED,
                 onCheckedChange = {
                     launchIO {
                         favoritesLock.mutate {
                             runSuspendCatching {
-                                modifyFavorites(galleryDetail.galleryInfo)
+                                if (quickfav) {
+                                    modifyFavorites(galleryDetail.galleryInfo, true)
+                                } else {
+                                    modifyFavorites(galleryDetail.galleryInfo)
+                                }
                             }.onSuccess { add ->
                                 if (add) {
                                     showSnackbar(addSucceed)

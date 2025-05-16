@@ -147,6 +147,16 @@ fun AnimatedVisibilityScope.AdvancedScreen(navigator: DestinationsNavigator) = S
                 value = Settings::debugFilter,
             )
             SwitchPreference(
+                title = "[Self] 禁用过滤",
+                summary = "禁用全部本地过滤器",
+                value = Settings::disableFilter,
+            )
+            SwitchPreference(
+                title = "[Self] 快捷收藏",
+                summary = "长按快捷收藏，此状态下画廊页收藏可选择收藏夹",
+                value = Settings::quickFav,
+            )
+            SwitchPreference(
                 title = stringResource(id = R.string.settings_advanced_save_crash_log),
                 summary = stringResource(id = R.string.settings_advanced_save_crash_log_summary),
                 value = Settings::saveCrashLog,

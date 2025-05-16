@@ -461,17 +461,18 @@ object EhEngine {
     }.fetchUsingAsText(GalleryTokenApiParser::parse)
 
     private suspend fun MutableList<BaseGalleryInfo>.fillInfo(url: String, filter: Boolean = false) = with(EhFilter) {
+        val enablefilter = !Settings.disableFilter
         // 初始化 debug 计数
         var otherFilterCount = 0
         val debugFilter = Settings.debugFilter
         val initialCount = size
-        if (filter) removeAllSuspend { filterTitle(it) || filterUploader(it) }
+        if (enablefilter && filter) removeAllSuspend { filterTitle(it) || filterUploader(it) }
         val hasTags = any { !it.simpleTags.isNullOrEmpty() }
         val hasPages = any { it.pages != 0 }
         val hasRated = any { it.rated }
         val needApi = filter && needTags() && !hasTags || Settings.showGalleryPages.value && !hasPages || hasRated
         if (needApi) fillGalleryListByApi(this@fillInfo, url)
-        if (filter) removeAllSuspend { filterUploader(it) || filterTag(it) || filterTagNamespace(it) }
+        if (enablefilter && filter) removeAllSuspend { filterUploader(it) || filterTag(it) || filterTagNamespace(it) }
         forEach {
             if (it.favoriteSlot == GalleryInfo.NOT_FAVORITED && EhDB.containLocalFavorites(it.gid)) {
                 it.favoriteSlot = GalleryInfo.LOCAL_FAVORITED
@@ -507,7 +508,7 @@ object EhEngine {
         }
         val afterfavCount = size
         // 标签组过滤
-        if (filter && isNotEmpty()) { // 确保列表非空
+        if (enablefilter && filter && isNotEmpty()) { // 确保列表非空
             val tempListg = toList() // 创建不可变副本进行测试过滤
             val filteredCountg = tempListg.count { !filterTagGroup(it) } // 计算过滤后剩余数量
             val keepCountg = 2 // 需要保留的元素数量，可以为3

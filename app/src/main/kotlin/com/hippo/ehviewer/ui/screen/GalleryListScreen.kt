@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.automirrored.filled.LastPage
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Reorder
@@ -83,6 +84,7 @@ import com.hippo.ehviewer.client.EhFilter.remember
 import com.hippo.ehviewer.client.EhTagDatabase
 import com.hippo.ehviewer.client.EhUtils
 import com.hippo.ehviewer.client.data.BaseGalleryInfo
+import com.hippo.ehviewer.client.data.GalleryInfo.Companion.NOT_FAVORITED
 import com.hippo.ehviewer.client.data.ListUrlBuilder
 import com.hippo.ehviewer.client.data.ListUrlBuilder.Companion.MODE_IMAGE_SEARCH
 import com.hippo.ehviewer.client.data.ListUrlBuilder.Companion.MODE_NORMAL
@@ -113,6 +115,7 @@ import com.hippo.ehviewer.ui.main.GalleryInfoGridItem
 import com.hippo.ehviewer.ui.main.GalleryInfoListItem
 import com.hippo.ehviewer.ui.main.GalleryList
 import com.hippo.ehviewer.ui.main.SearchFilter
+import com.hippo.ehviewer.ui.modifyFavorites
 import com.hippo.ehviewer.ui.tools.Await
 import com.hippo.ehviewer.ui.tools.DialogState
 import com.hippo.ehviewer.ui.tools.EmptyWindowInsets
@@ -132,10 +135,15 @@ import com.ramcosta.composedestinations.spec.Direction
 import eu.kanade.tachiyomi.util.lang.launchIO
 import eu.kanade.tachiyomi.util.lang.withIOContext
 import eu.kanade.tachiyomi.util.lang.withUIContext
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.roundToInt
 import kotlin.random.Random
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import moe.tarsin.coroutines.onEachLatest
 import moe.tarsin.coroutines.runSuspendCatching
 import sh.calvin.reorderable.ReorderableItem
@@ -340,7 +348,9 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                                         awaitConfirmationOrCancel {
                                             Text(text = "屏蔽 \"$processedText\" ($modeDisplayName)?")
                                         }
-                                        Filter(filterMode, processedText).remember()
+                                        withContext(Dispatchers.IO) {
+                                            Filter(filterMode, processedText).remember()
+                                        }
                                         showSnackbar("过滤项已添加")
                                     }
                                 }
@@ -641,7 +651,27 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
             detailItemContent = { info ->
                 GalleryInfoListItem(
                     onClick = { navigate(info.asDst()) },
-                    onLongClick = { launch { doGalleryInfoAction(info) } },
+//                    onLongClick = { launch { doGalleryInfoAction(info) } },
+                    onLongClick = {
+                        launch {
+                            val quickfav = Settings.quickFav
+                            if (quickfav) {
+                                val favorited = info.favoriteSlot != NOT_FAVORITED
+                                if (!favorited) {
+                                    runSuspendCatching {
+                                        modifyFavorites(info)
+                                        showTip(R.string.add_to_favorite_success)
+                                    }.onFailure {
+                                        showTip(R.string.add_to_favorite_failure)
+                                    }
+                                } else {
+                                    doGalleryInfoAction(info)
+                                }
+                            } else {
+                                doGalleryInfoAction(info)
+                            }
+                        }
+                    },
                     info = info,
                     showPages = showPages,
                     modifier = Modifier.height(height),
@@ -651,7 +681,27 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
             thumbItemContent = { info ->
                 GalleryInfoGridItem(
                     onClick = { navigate(info.asDst()) },
-                    onLongClick = { launch { doGalleryInfoAction(info) } },
+//                    onLongClick = { launch { doGalleryInfoAction(info) } },
+                    onLongClick = {
+                        launch {
+                            val quickfav = Settings.quickFav
+                            if (quickfav) {
+                                val favorited = info.favoriteSlot != NOT_FAVORITED
+                                if (!favorited) {
+                                    runSuspendCatching {
+                                        modifyFavorites(info)
+                                        showTip(R.string.add_to_favorite_success)
+                                    }.onFailure {
+                                        showTip(R.string.add_to_favorite_failure)
+                                    }
+                                } else {
+                                    doGalleryInfoAction(info)
+                                }
+                            } else {
+                                doGalleryInfoAction(info)
+                            }
+                        }
+                    },
                     info = info,
                     showPages = showPages,
                 )
@@ -665,6 +715,11 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
         )
     }
 
+    // 获取当前已加载的画廊列表（LazyPagingItems）
+    val currentGalleryList = data.itemSnapshotList.items
+    // 批量收藏任务处理状态下防止重复点击
+    var isProcessing by remember { mutableStateOf(false) }
+    var batchFavJob: Job? = null
     val gotoTitle = stringResource(R.string.go_to)
     val invalidNum = stringResource(R.string.error_invalid_number)
     val outOfRange = stringResource(R.string.error_out_of_range)
@@ -693,6 +748,49 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
         onClick(Icons.Default.Refresh) {
             urlBuilder.setRange(0)
             data.refresh()
+        }
+        onClick(Icons.Default.Bookmarks) {
+            if (!isProcessing) {
+                isProcessing = true
+                var successCount = 0
+                batchFavJob = launch {
+                    try {
+                        awaitConfirmationOrCancel {
+                            Text(text = "警告：确定要将当前已加载的 ${currentGalleryList.size} 个画廊全部收藏到默认收藏夹?")
+                        }
+                        currentGalleryList.chunked(10).forEach { chunk ->
+                            chunk.forEach { galleryInfo ->
+                                ensureActive()
+                                val isFavorited = galleryInfo.favoriteSlot != NOT_FAVORITED
+                                if (!isFavorited) {
+                                    runSuspendCatching {
+                                        modifyFavorites(galleryInfo)
+                                    }.onSuccess { successCount++ }
+                                    delay(100) // 每个画廊处理完延迟100毫秒
+                                } else {
+                                    successCount++
+                                }
+                            }
+                            ensureActive()
+                            delay(200) // 每组画廊处理完延迟200毫秒
+                            showSnackbar("少女祈祷中 ($successCount/${currentGalleryList.size})……")
+                        }
+                        showSnackbar("成功收藏 $successCount/${currentGalleryList.size} 个画廊")
+                    } catch (e: CancellationException) {
+                        showSnackbar("已中止任务，成功收藏 $successCount 个画廊")
+                    } finally {
+                        isProcessing = false
+                        batchFavJob = null
+                    }
+                }
+            } else {
+                launch {
+                    awaitConfirmationOrCancel {
+                        Text(text = "中止当前的收藏任务?")
+                    }
+                    batchFavJob?.cancel(CancellationException("手动中止"))
+                }
+            }
         }
         if (urlBuilder.mode != MODE_WHATS_HOT) {
             onClick(EhIcons.Default.GoTo) {

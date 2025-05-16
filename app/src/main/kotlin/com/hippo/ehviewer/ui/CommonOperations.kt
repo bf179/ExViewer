@@ -191,12 +191,12 @@ suspend fun DialogState.startDownload(
     }
 }
 
-suspend fun DialogState.modifyFavorites(galleryInfo: BaseGalleryInfo): Boolean {
+suspend fun DialogState.modifyFavorites(galleryInfo: BaseGalleryInfo, showFavslotList: Boolean = false): Boolean {
     val localFavorited = EhDB.containLocalFavorites(galleryInfo.gid)
     if (Settings.hasSignedIn.value) {
         val isFavorited = galleryInfo.favoriteSlot != NOT_FAVORITED
         val defaultFavSlot = Settings.defaultFavSlot
-        if (defaultFavSlot == -2) {
+        if (showFavslotList || (defaultFavSlot == -2)) {
             val localFav = getFavoriteIcon(localFavorited) to appCtx.getString(R.string.local_favorites)
             val cloudFav = Settings.favCat.mapIndexed { index, name ->
                 getFavoriteIcon(galleryInfo.favoriteSlot == index) to name

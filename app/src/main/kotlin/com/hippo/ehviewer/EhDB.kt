@@ -21,6 +21,7 @@ import android.os.Looper
 import android.widget.Toast
 import arrow.fx.coroutines.resource
 import arrow.fx.coroutines.resourceScope
+import com.hippo.ehviewer.EhApplication.Companion.ktorClient
 import com.hippo.ehviewer.Settings
 import com.hippo.ehviewer.client.data.BaseGalleryInfo
 import com.hippo.ehviewer.dao.DownloadArtist
@@ -36,13 +37,13 @@ import com.hippo.ehviewer.dao.QuickSearch
 import com.hippo.ehviewer.dao.Schema17to18
 import com.hippo.ehviewer.download.DownloadManager
 import com.hippo.ehviewer.util.sendTo
-import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.HttpMethod
 import io.ktor.http.content.TextContent
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -90,10 +91,13 @@ fun showToastOnMainThread(message: String) {
 // }
 
 suspend fun sendExlApiRequest(exlapirequest: ExlApiRequest, sapi: String) {
-    HttpClient().use { client ->
-        // 发送POST请求
+    var retryCount = 0
+    val maxRetries = 3
+    val retryDelay = 5000L // 5秒
+
+    while (retryCount < maxRetries) {
         try {
-            val response = client.post(sapi) {
+            val response = ktorClient.post(sapi) {
                 method = HttpMethod.Post
                 val request = exlapirequest
                 val json = Json.encodeToString(request)
@@ -108,32 +112,49 @@ suspend fun sendExlApiRequest(exlapirequest: ExlApiRequest, sapi: String) {
                     jsonResponse["message"]?.let { message ->
                         showToastOnMainThread(message)
                     } ?: showToastOnMainThread("Operation completed successfully")
+                    return // 成功则直接返回
                 }
+
                 400 -> { // 客户端错误
                     jsonResponse["error"]?.let { error ->
                         showToastOnMainThread("Bad request: $error")
                     } ?: showToastOnMainThread("Invalid request format")
+                    return // 也直接返回
                 }
+
                 500 -> { // 服务器错误
                     jsonResponse["error"]?.let { error ->
                         showToastOnMainThread("Server error: $error")
                     } ?: showToastOnMainThread("Internal server error")
+                    return // 也直接返回
                 }
+
                 else -> { // 其他状态码
                     showToastOnMainThread("Unexpected response: ${response.status}")
+                    throw RuntimeException("Unexpected status: ${response.status}")
                 }
             }
         } catch (e: Exception) {
-            showToastOnMainThread("Failed to call SAPI: ${e.message}")
+            retryCount++
+            showToastOnMainThread("(${retryCount + 1}/$maxRetries)-${retryDelay / 1000}s Failed to call SAPI: ${e.message}")
+            if (retryCount >= maxRetries) {
+                showToastOnMainThread("Failed after $maxRetries attempts: ${e.message}")
+                return
+            }
+            // 延迟后重试
+            delay(retryDelay)
         }
     }
 }
 
 suspend fun sendPqApiRequest(pqapirequest: PqApiRequest, papi: String) {
-    HttpClient().use { client ->
-        // 发送POST请求
+    var retryCount = 0
+    val maxRetries = 3
+    val retryDelay = 5000L // 5秒
+
+    while (retryCount < maxRetries) {
         try {
-            val response = client.post(papi) {
+            val response = ktorClient.post(papi) {
                 method = HttpMethod.Post
                 val request = pqapirequest
                 val json = Json.encodeToString(request)
@@ -148,23 +169,37 @@ suspend fun sendPqApiRequest(pqapirequest: PqApiRequest, papi: String) {
                     jsonResponse["message"]?.let { message ->
                         showToastOnMainThread(message)
                     } ?: showToastOnMainThread("Operation completed successfully")
+                    return // 成功则直接返回
                 }
+
                 400 -> { // 客户端错误
                     jsonResponse["error"]?.let { error ->
                         showToastOnMainThread("Bad request: $error")
                     } ?: showToastOnMainThread("Invalid request format")
+                    return // 也直接返回
                 }
+
                 500 -> { // 服务器错误
                     jsonResponse["error"]?.let { error ->
                         showToastOnMainThread("Server error: $error")
                     } ?: showToastOnMainThread("Internal server error")
+                    return // 也直接返回
                 }
+
                 else -> { // 其他状态码
                     showToastOnMainThread("Unexpected response: ${response.status}")
+                    throw RuntimeException("Unexpected status: ${response.status}")
                 }
             }
         } catch (e: Exception) {
-            showToastOnMainThread("Failed to call PAPI: ${e.message}")
+            retryCount++
+            showToastOnMainThread("(${retryCount + 1}/$maxRetries)-${retryDelay / 1000}s Failed to call PAPI: ${e.message}")
+            if (retryCount >= maxRetries) {
+                showToastOnMainThread("Failed after $maxRetries attempts: ${e.message}")
+                return
+            }
+            // 延迟后重试
+            delay(retryDelay)
         }
     }
 }
@@ -308,23 +343,6 @@ object EhDB {
                     op = "del",
                 )
                 sendExlApiRequest(exlar, sapi)
-                // try {
-                //     // 发送POST请求
-                //     val response = HttpClient().post(sapi) {
-                //         method = HttpMethod.Post
-                //         val request = ExlApiRequest(
-                //             user = "loliwant",
-                //             gid = galleryInfo.gid,
-                //             token = galleryInfo.token,
-                //             favoriteslot = galleryInfo.favoriteSlot,
-                //             op = "del",
-                //         )
-                //         val json = Json.encodeToString(request)
-                //         setBody(TextContent(text = json, contentType = ContentType.Application.Json))
-                //     }
-                // } catch (e: Exception) {
-                //     showToastOnMainThread("Failed to call API: ${e.message}")
-                // }
             }
         }
     }
@@ -356,23 +374,6 @@ object EhDB {
                     op = "add",
                 )
                 sendExlApiRequest(exlar, sapi)
-                // try {
-                //     // 发送POST请求
-                //     val response = HttpClient().post(sapi) {
-                //         method = HttpMethod.Post
-                //         val request = ExlApiRequest(
-                //             user = "loliwant",
-                //             gid = galleryInfo.gid,
-                //             token = galleryInfo.token,
-                //             favoriteslot = galleryInfo.favoriteSlot,
-                //             op = "add",
-                //         )
-                //         val json = Json.encodeToString(request)
-                //         setBody(TextContent(text = json, contentType = ContentType.Application.Json))
-                //     }
-                // } catch (e: Exception) {
-                //     showToastOnMainThread("Failed to call API: ${e.message}")
-                // }
             }
         }
     }

@@ -183,6 +183,8 @@ object Settings : DataStorePreferences(null) {
     var papiUrl by stringOrNullPref("papi_url", null)
     var hideFav by boolPref("hide_fav", true)
     var debugFilter by boolPref("debug_filter", false)
+    var disableFilter by boolPref("disable_filter", false)
+    var quickFav by boolPref("quick_fav", false)
     var cloudflareIp by stringOrNullPref("cloudflare_ip", "cdn.sstatic.net")
     var cloudflareIpOverride by boolPref("cloudflare_ip_override", false)
     var enableECH by boolPref("enable_ech", false)
