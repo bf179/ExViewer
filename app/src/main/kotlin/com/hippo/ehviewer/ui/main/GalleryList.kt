@@ -21,7 +21,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ShapeDefaults
@@ -84,7 +84,7 @@ fun GalleryList(
     modifier: Modifier = Modifier,
     data: LazyPagingItems<BaseGalleryInfo>,
     contentModifier: Modifier = Modifier,
-    contentPadding: PaddingValues = PaddingValues(0.dp),
+    contentPadding: PaddingValues = PaddingValues.Zero,
     listMode: Int,
     detailListState: LazyGridState = rememberLazyGridState(),
     detailItemContent: @Composable (LazyGridItemScope.(BaseGalleryInfo) -> Unit),
@@ -203,7 +203,7 @@ fun GalleryList(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center,
                     ) {
-                        CircularProgressIndicator()
+                        CircularWavyProgressIndicator()
                     }
                 }
             }
@@ -223,7 +223,7 @@ fun GalleryList(
             }
         }
 
-        PullToRefreshDefaults.Indicator(
+        PullToRefreshDefaults.LoadingIndicator(
             state = refreshState,
             isRefreshing = isRefreshing,
             modifier = Modifier.align(Alignment.TopCenter).padding(top = contentPadding.calculateTopPadding())

@@ -34,7 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -47,6 +47,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -297,6 +299,7 @@ fun AnimatedVisibilityScope.GalleryCommentsScreen(gid: Long, navigator: Destinat
         val keylineMargin = dimensionResource(id = R.dimen.keyline_margin)
         var editTextMeasured by remember { mutableStateOf(MinimumContentPaddingEditText) }
         var isRefreshing by remember { mutableStateOf(false) }
+        val refreshState = rememberPullToRefreshState()
         PullToRefreshBox(
             isRefreshing = isRefreshing,
             onRefresh = {
@@ -309,6 +312,14 @@ fun AnimatedVisibilityScope.GalleryCommentsScreen(gid: Long, navigator: Destinat
                 }
             },
             modifier = Modifier.fillMaxSize().imePadding().padding(top = paddingValues.calculateTopPadding()),
+            state = refreshState,
+            indicator = {
+                PullToRefreshDefaults.LoadingIndicator(
+                    modifier = Modifier.align(Alignment.TopCenter),
+                    isRefreshing = isRefreshing,
+                    state = refreshState,
+                )
+            },
         ) {
             val additionalPadding = if (commenting) {
                 editTextMeasured
@@ -404,7 +415,7 @@ fun AnimatedVisibilityScope.GalleryCommentsScreen(gid: Long, navigator: Destinat
                         onUrlClick = {
                             if (it.startsWith("#c")) {
                                 it.substring(2).toLongOrNull()?.let { id ->
-                                    val index = comments.comments.indexOfFirst { it.id == id }
+                                    val index = comments.comments.indexOfFirst { c -> c.id == id }
                                     if (index != -1) {
                                         launch { lazyListState.animateScrollToItem(index) }
                                     }
@@ -424,7 +435,7 @@ fun AnimatedVisibilityScope.GalleryCommentsScreen(gid: Long, navigator: Destinat
                                 contentAlignment = Alignment.Center,
                             ) {
                                 if (it) {
-                                    CircularProgressIndicator()
+                                    CircularWavyProgressIndicator()
                                 } else {
                                     TextButton(
                                         onClick = {

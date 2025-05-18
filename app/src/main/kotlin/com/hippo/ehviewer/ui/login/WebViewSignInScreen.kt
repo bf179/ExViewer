@@ -14,6 +14,7 @@ import com.google.accompanist.web.AccompanistWebViewClient
 import com.google.accompanist.web.WebView
 import com.google.accompanist.web.rememberWebViewState
 import com.hippo.ehviewer.EhApplication.Companion.nonCacheOkHttpClient
+import com.hippo.ehviewer.Settings
 import com.hippo.ehviewer.client.EhCookieStore
 import com.hippo.ehviewer.client.EhUrl
 import com.hippo.ehviewer.client.EhUtils
@@ -106,6 +107,9 @@ fun AnimatedVisibilityScope.WebViewSignInScreen(navigator: DestinationsNavigator
         override fun onPageFinished(view: WebView, url: String?) {
             super.onPageFinished(view, url)
             view.evaluateJavascript(jsCode, null)
+            if (EhCookieStore.isCloudflareBypassed()) {
+                Settings.desktopSite.value = false
+            }
             if (EhCookieStore.hasSignedIn()) {
                 postLogin()
                 view.destroy()

@@ -125,6 +125,7 @@ object Settings : DataStorePreferences(null) {
     val qSSaveProgress = boolPref("qs_save_progress", true)
     val security = boolPref("require_unlock", false)
     val animateItems = boolPref("animate_items", true)
+    val desktopSite = boolPref("desktop_site", true)
     val displayName = stringOrNullPref("display_name", null)
     val avatar = stringOrNullPref("avatar", null)
     val recentDownloadLabel = stringOrNullPref("recent_download_label", null)

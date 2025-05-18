@@ -30,7 +30,7 @@ option(XZ_TOOL_XZDEC OFF)
 FetchContent_Declare(
         liblzma
         GIT_REPOSITORY https://github.com/tukaani-project/xz.git
-        GIT_TAG v5.8.0
+        GIT_TAG v5.8.1
         GIT_SHALLOW 1
 )
 
@@ -113,7 +113,7 @@ include_directories(${libarchive_SOURCE_DIR}/libarchive)
 FetchContent_Declare(
         Corrosion
         GIT_REPOSITORY https://github.com/corrosion-rs/corrosion.git
-        GIT_TAG v0.5.1
+        GIT_TAG v0.5.2
         GIT_SHALLOW 1
 )
 

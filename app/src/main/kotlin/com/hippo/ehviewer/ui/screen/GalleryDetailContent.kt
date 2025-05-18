@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,7 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -62,7 +63,6 @@ import androidx.paging.cachedIn
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
-import androidx.window.core.layout.WindowWidthSizeClass
 import arrow.core.partially1
 import arrow.fx.coroutines.parMap
 import arrow.fx.coroutines.parZip
@@ -117,7 +117,6 @@ import com.hippo.ehviewer.ui.openBrowser
 import com.hippo.ehviewer.ui.startDownload
 import com.hippo.ehviewer.ui.tools.CrystalCard
 import com.hippo.ehviewer.ui.tools.DialogState
-import com.hippo.ehviewer.ui.tools.EmptyWindowInsets
 import com.hippo.ehviewer.ui.tools.FastScrollLazyVerticalGrid
 import com.hippo.ehviewer.ui.tools.FilledTertiaryIconButton
 import com.hippo.ehviewer.ui.tools.FilledTertiaryIconToggleButton
@@ -129,6 +128,7 @@ import com.hippo.ehviewer.ui.tools.foldToLoadResult
 import com.hippo.ehviewer.ui.tools.getClippedRefreshKey
 import com.hippo.ehviewer.ui.tools.getLimit
 import com.hippo.ehviewer.ui.tools.getOffset
+import com.hippo.ehviewer.ui.tools.isExpanded
 import com.hippo.ehviewer.ui.tools.rememberInVM
 import com.hippo.ehviewer.util.FavouriteStatusRouter
 import com.hippo.ehviewer.util.addTextToClipboard
@@ -213,7 +213,7 @@ fun GalleryDetailContent(
             dialog { cont ->
                 ModalBottomSheet(
                     onDismissRequest = { cont.cancel() },
-                    contentWindowInsets = { EmptyWindowInsets },
+                    contentWindowInsets = { WindowInsets() },
                 ) {
                     GalleryInfoBottomSheet(galleryDetail)
                 }
@@ -246,8 +246,8 @@ fun GalleryDetailContent(
     }
 
     val previews = galleryDetail?.collectPreviewItems()
-    when (windowSizeClass.windowWidthSizeClass) {
-        WindowWidthSizeClass.MEDIUM, WindowWidthSizeClass.COMPACT -> FastScrollLazyVerticalGrid(
+    when {
+        !windowSizeClass.isExpanded -> FastScrollLazyVerticalGrid(
             columns = GridCells.Fixed(thumbColumns),
             contentPadding = contentPadding,
             modifier = modifier.padding(horizontal = keylineMargin),
@@ -298,7 +298,7 @@ fun GalleryDetailContent(
                             modifier = Modifier.fillMaxSize().padding(keylineMargin),
                             contentAlignment = Alignment.Center,
                         ) {
-                            CircularProgressIndicator()
+                            CircularWavyProgressIndicator()
                         }
                     }
                 }
@@ -308,7 +308,7 @@ fun GalleryDetailContent(
             }
         }
 
-        WindowWidthSizeClass.EXPANDED -> FastScrollLazyVerticalGrid(
+        else -> FastScrollLazyVerticalGrid(
             columns = GridCells.Fixed(thumbColumns),
             contentPadding = contentPadding,
             modifier = modifier.padding(horizontal = keylineMargin),
@@ -366,7 +366,7 @@ fun GalleryDetailContent(
                             modifier = Modifier.fillMaxSize().padding(keylineMargin),
                             contentAlignment = Alignment.Center,
                         ) {
-                            CircularProgressIndicator()
+                            CircularWavyProgressIndicator()
                         }
                     }
                 }
