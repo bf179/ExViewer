@@ -1,5 +1,6 @@
-import com.mikepenz.aboutlibraries.plugin.DuplicateMode.MERGE
-import com.mikepenz.aboutlibraries.plugin.DuplicateRule.GROUP
+import com.mikepenz.aboutlibraries.plugin.DuplicateMode
+import com.mikepenz.aboutlibraries.plugin.DuplicateRule
+import java.util.regex.Pattern
 import org.jetbrains.kotlin.compose.compiler.gradle.ComposeFeatureFlag
 
 val isRelease: Boolean
@@ -309,8 +310,14 @@ ksp {
 }
 
 aboutLibraries {
-    duplicationMode = MERGE
-    duplicationRule = GROUP
+    collect {
+        includePlatform = false
+    }
+    library {
+        exclusionPatterns.add(Pattern.compile("org\\.jetbrains\\.(?:compose|androidx)\\..*"))
+        duplicationMode = DuplicateMode.MERGE
+        duplicationRule = DuplicateRule.GROUP
+    }
 }
 
 val ktlintVersion = libs.ktlint.get().version

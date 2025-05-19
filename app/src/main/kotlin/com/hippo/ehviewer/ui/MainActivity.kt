@@ -85,7 +85,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.runtime.currentCompositeKeyHash
+import androidx.compose.runtime.currentCompositeKeyHashCode
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -112,6 +112,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
+import androidx.core.net.toUri
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.navigation.NavController
@@ -384,7 +385,7 @@ class MainActivity : EhActivity() {
                 onPauseOrDispose { job.cancel() }
             }
             val currentDestination by navController.currentDestinationAsState()
-            val drawerHandle = remember { mutableStateListOf<Int>() }
+            val drawerHandle = remember { mutableStateListOf<Long>() }
             var snackbarFabPadding by remember { mutableStateOf(0.dp) }
             val drawerEnabled = drawerHandle.isNotEmpty()
             val density = LocalDensity.current
@@ -547,13 +548,13 @@ class MainActivity : EhActivity() {
                 try {
                     val intent = Intent(
                         android.provider.Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS,
-                        Uri.parse("package:$packageName"),
+                        "package:$packageName".toUri(),
                     )
                     startActivity(intent)
                 } catch (_: Throwable) {
                     val intent = Intent(
                         android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                        Uri.parse("package:$packageName"),
+                        "package:$packageName".toUri(),
                     )
                     startActivity(intent)
                 }
@@ -589,7 +590,7 @@ class MainActivity : EhActivity() {
 
     override fun onProvideAssistContent(outContent: AssistContent?) {
         super.onProvideAssistContent(outContent)
-        shareUrl?.let { outContent?.webUri = Uri.parse(shareUrl) }
+        shareUrl?.let { outContent?.webUri = it.toUri() }
     }
 
     private val mNetworkCallback = object : ConnectivityManager.NetworkCallback() {
@@ -616,7 +617,7 @@ class MainActivity : EhActivity() {
 
 val LocalNavDrawerState = compositionLocalOf<DrawerState> { error("CompositionLocal LocalNavDrawerState not present!") }
 val LocalSideSheetState = compositionLocalOf<DrawerState2> { error("CompositionLocal LocalSideSheetState not present!") }
-val LocalDrawerHandle = compositionLocalOf<SnapshotStateList<Int>> { error("CompositionLocal LocalDrawerHandle not present!") }
+val LocalDrawerHandle = compositionLocalOf<SnapshotStateList<Long>> { error("CompositionLocal LocalDrawerHandle not present!") }
 val LocalSnackBarHostState = compositionLocalOf<SnackbarHostState> { error("CompositionLocal LocalSnackBarHostState not present!") }
 val LocalSnackBarFabPadding = compositionLocalOf<State<Dp>> { error("CompositionLocal LocalSnackBarFabPadding not present!") }
 val LocalSharedTransitionScope = compositionLocalOf<SharedTransitionScope> { error("CompositionLocal LocalSharedTransitionScope not present!") }
@@ -624,7 +625,7 @@ val LocalSharedTransitionScope = compositionLocalOf<SharedTransitionScope> { err
 @Composable
 fun DrawerHandle(enabled: Boolean) {
     if (enabled) {
-        val current = currentCompositeKeyHash
+        val current = currentCompositeKeyHashCode
         val handle = LocalDrawerHandle.current
         DisposableEffect(current) {
             handle.add(current)

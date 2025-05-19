@@ -57,6 +57,8 @@ object EhCookieStore : CookiesStorage {
         manager.setCookie(url, renderSetCookieHeader(cookie))
     }
 
+    fun isCloudflareBypassed() = getCookies(EhUrl.HOST_E)?.containsKey("cf_clearance") == true
+
     fun flush() = manager.flush()
 
     fun getCookieHeader(url: String): String? = manager.getCookie(url)
