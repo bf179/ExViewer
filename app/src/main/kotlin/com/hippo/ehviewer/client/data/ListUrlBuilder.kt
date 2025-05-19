@@ -20,10 +20,12 @@ import com.hippo.ehviewer.client.EhUrl
 import com.hippo.ehviewer.client.EhUtils
 import com.hippo.ehviewer.client.addQueryParameter
 import com.hippo.ehviewer.client.addQueryParameterIfNotBlank
+import com.hippo.ehviewer.client.data.ListUrlBuilder.Companion.MODE_NORMAL
 import com.hippo.ehviewer.client.ehUrl
 import com.hippo.ehviewer.dao.QuickSearch
 import com.hippo.ehviewer.ui.main.AdvanceTable
 import io.ktor.http.Parameters
+import kotlin.Int
 import kotlin.text.toIntOrNull
 import kotlinx.parcelize.Parcelize
 
@@ -92,6 +94,8 @@ data class ListUrlBuilder(
         return this.copy(
             mode = MODE_NORMAL,
             mKeyword = if (MODE_UPLOADER == mode) newKeyword.removePrefix("uploader:") else newKeyword,
+            prev = null,
+            next = null,
         )
     }
 

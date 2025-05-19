@@ -27,11 +27,11 @@ import androidx.compose.material.icons.automirrored.filled.LastPage
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.FilterAlt
-import androidx.compose.material.icons.filled.Flight
+import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Reorder
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Bookmarks
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -766,7 +766,7 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
             urlBuilder.setRange(0)
             data.refresh()
         }
-        onClick(Icons.Default.Star) {
+        onClick(Icons.Default.Flag) {
             launch {
                 try {
                     // 用于存储当前搜索状态用于快速恢复
@@ -783,9 +783,10 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                 }
             }
         }
-        onClick(Icons.Default.Flight) {
+        onClick(Icons.Default.Restore) {
             launch {
                 try {
+                    // 快速恢复到存储的搜索状态
                     val lastSearch = EhDB.getLastSearch()
                     lastSearch?.let { search ->
                         // 创建新的 UrlBuilder 并应用搜索条件
