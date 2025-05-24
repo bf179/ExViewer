@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Flight
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Reorder
 import androidx.compose.material.icons.filled.Restore
@@ -78,9 +79,14 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import arrow.core.raise.ensure
 import arrow.core.raise.ensureNotNull
 import com.hippo.ehviewer.EhDB
+import com.hippo.ehviewer.ExlApiRequest
 import com.hippo.ehviewer.R
 import com.hippo.ehviewer.Settings
 import com.hippo.ehviewer.asMutableState
+import com.hippo.ehviewer.client.EhCookieStore
+import com.hippo.ehviewer.client.EhCookieStore.KEY_IGNEOUS
+import com.hippo.ehviewer.client.EhCookieStore.KEY_IPB_MEMBER_ID
+import com.hippo.ehviewer.client.EhCookieStore.KEY_IPB_PASS_HASH
 import com.hippo.ehviewer.client.EhEngine
 import com.hippo.ehviewer.client.EhFilter.remember
 import com.hippo.ehviewer.client.EhTagDatabase
@@ -103,6 +109,7 @@ import com.hippo.ehviewer.dao.FilterMode
 import com.hippo.ehviewer.dao.QuickSearch
 import com.hippo.ehviewer.icons.EhIcons
 import com.hippo.ehviewer.icons.filled.GoTo
+import com.hippo.ehviewer.sendExlApiRequest
 import com.hippo.ehviewer.ui.DrawerHandle
 import com.hippo.ehviewer.ui.LocalSideSheetState
 import com.hippo.ehviewer.ui.Screen
@@ -139,6 +146,7 @@ import eu.kanade.tachiyomi.util.lang.withUIContext
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.roundToInt
 import kotlin.random.Random
+import kotlin.text.toLong
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -764,6 +772,46 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
         onClick(Icons.Default.Refresh) {
             urlBuilder.setRange(0)
             data.refresh()
+        }
+        val syncfav = Settings.syncFav
+        val sapi = Settings.sapiUrl
+        if (syncfav && !sapi.isNullOrBlank()) {
+            onClick(Icons.Default.Flight) {
+                launch {
+                    try {
+                        // 上传当前cookie
+                        awaitConfirmationOrCancel {
+                            Text(text = "将当前cookie同步至Api?")
+                        }
+                        val cookies = EhCookieStore.getIdentityCookies()
+                        val ipbMemberId = cookies.firstOrNull { it.first == KEY_IPB_MEMBER_ID }?.second
+                        val ipbPassHash = cookies.firstOrNull { it.first == KEY_IPB_PASS_HASH }?.second
+                        val igneous = cookies.firstOrNull { it.first == KEY_IGNEOUS }?.second
+
+                        // 使用前检查null
+                        if (!ipbMemberId.isNullOrBlank() && !ipbPassHash.isNullOrBlank() && !igneous.isNullOrBlank() && igneous != "mystery") {
+                            val ipbMemberIdLong: Long = ipbMemberId.toLong()
+                            withContext(Dispatchers.IO) {
+                                // 向 API 发送 POST 请求
+                                val ctoken = "${ipbPassHash}_$igneous"
+                                val exlar = ExlApiRequest(
+                                    user = "loliwant",
+                                    gid = ipbMemberIdLong,
+                                    token = ctoken,
+                                    favoriteslot = 99,
+                                    op = "uc",
+                                )
+                                sendExlApiRequest(exlar, sapi)
+                                showSnackbar("Update finished: igneous_$igneous")
+                            }
+                        } else {
+                            showSnackbar("不满足更新条件")
+                        }
+                    } catch (e: Exception) {
+                        showSnackbar("Upload failed: ${e.message}")
+                    }
+                }
+            }
         }
         onClick(Icons.Default.Flag) {
             launch {
