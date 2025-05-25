@@ -192,7 +192,7 @@ suspend fun DialogState.startDownload(
     }
 }
 
-suspend fun DialogState.modifyFavorites(galleryInfo: BaseGalleryInfo, showFavslotList: Boolean = false): Boolean {
+suspend fun DialogState.modifyFavorites(galleryInfo: BaseGalleryInfo, showFavslotList: Boolean = false, showSuccessToast: Boolean = true): Boolean {
     val localFavorited = EhDB.containLocalFavorites(galleryInfo.gid)
     if (Settings.hasSignedIn.value) {
         val isFavorited = galleryInfo.favoriteSlot != NOT_FAVORITED
@@ -222,7 +222,7 @@ suspend fun DialogState.modifyFavorites(galleryInfo: BaseGalleryInfo, showFavslo
             )
             return doModifyFavorites(galleryInfo, if (isFavorited) slot - 2 else slot - 1, localFavorited, note)
         } else {
-            return doModifyFavorites(galleryInfo, if (isFavorited) NOT_FAVORITED else defaultFavSlot, localFavorited)
+            return doModifyFavorites(galleryInfo, if (isFavorited) NOT_FAVORITED else defaultFavSlot, localFavorited, showSuccessToast = showSuccessToast)
         }
     } else {
         return doModifyFavorites(galleryInfo, LOCAL_FAVORITED, localFavorited)
@@ -234,6 +234,7 @@ private suspend fun doModifyFavorites(
     slot: Int = NOT_FAVORITED,
     localFavorited: Boolean = true,
     note: String = "",
+    showSuccessToast: Boolean = true,
 ) = with(galleryInfo) {
     val add = when (slot) {
         NOT_FAVORITED -> { // Remove from cloud favorites first
@@ -253,7 +254,7 @@ private suspend fun doModifyFavorites(
             if (localFavorited) {
                 EhDB.removeLocalFavorites(galleryInfo)
             } else {
-                EhDB.putLocalFavorites(galleryInfo)
+                EhDB.putLocalFavorites(galleryInfo, showSuccessToast)
             }
             // Keep cloud favorite slot
             if (favoriteSlot == NOT_FAVORITED) {
@@ -265,7 +266,7 @@ private suspend fun doModifyFavorites(
         }
 
         in 0..9 -> {
-            EhEngine.modifyFavorites(gid, token, slot, note)
+            EhEngine.modifyFavorites(gid, token, slot, note, showSuccessToast)
             favoriteSlot = slot
             favoriteName = Settings.favCat[slot]
             favoriteNote = note

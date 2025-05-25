@@ -875,7 +875,7 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                                 val isFavorited = galleryInfo.favoriteSlot != NOT_FAVORITED
                                 if (!isFavorited) {
                                     runSuspendCatching {
-                                        modifyFavorites(galleryInfo)
+                                        modifyFavorites(galleryInfo, showSuccessToast = false)
                                     }.onSuccess { successCount++ }
                                     if (slowfav) {
                                         delay(4000)
@@ -887,9 +887,9 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                             }
                             ensureActive()
                             delay(200) // 每组画廊处理完延迟200毫秒
-                            if (slowfav) {
-                                delay(5000)
-                            }
+                            // if (slowfav) {
+                            //     delay(5000)
+                            // }
                             showSnackbar("少女祈祷中 ($successCount/${currentGalleryList.size})……")
                         }
                         showSnackbar("成功收藏 $successCount/${currentGalleryList.size} 个画廊")

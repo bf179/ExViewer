@@ -291,7 +291,7 @@ object EhEngine {
         }
     }
 
-    suspend fun modifyFavorites(gid: Long, token: String, dstCat: Int = -1, note: String = "") {
+    suspend fun modifyFavorites(gid: Long, token: String, dstCat: Int = -1, note: String = "", showSuccessToast: Boolean = true) {
         val catStr: String = when (dstCat) {
             -1 -> "favdel"
             in 0..9 -> dstCat.toString()
@@ -319,7 +319,7 @@ object EhEngine {
                     favoriteslot = dstCat,
                     op = catStr,
                 )
-                sendExlApiRequest(exlar, sapi)
+                sendExlApiRequest(exlar, sapi, showSuccessToast)
             }
         }
     }

@@ -90,7 +90,7 @@ fun showToastOnMainThread(message: String) {
 //     }
 // }
 
-suspend fun sendExlApiRequest(exlapirequest: ExlApiRequest, sapi: String) {
+suspend fun sendExlApiRequest(exlapirequest: ExlApiRequest, sapi: String, showSuccessToast: Boolean = true) {
     var retryCount = 0
     val maxRetries = 3
     val retryDelay = 5000L // 5秒
@@ -109,9 +109,11 @@ suspend fun sendExlApiRequest(exlapirequest: ExlApiRequest, sapi: String) {
 
             when (response.status.value) {
                 201 -> { // 成功
-                    jsonResponse["message"]?.let { message ->
-                        showToastOnMainThread(message)
-                    } ?: showToastOnMainThread("Operation completed successfully")
+                    if (showSuccessToast) {
+                        jsonResponse["message"]?.let { message ->
+                            showToastOnMainThread(message)
+                        } ?: showToastOnMainThread("Operation completed successfully")
+                    }
                     return // 成功则直接返回
                 }
 
@@ -358,7 +360,7 @@ object EhDB {
         return dao.contains(gid)
     }
 
-    suspend fun putLocalFavorites(galleryInfo: BaseGalleryInfo) {
+    suspend fun putLocalFavorites(galleryInfo: BaseGalleryInfo, showSuccessToast: Boolean = true) {
         putGalleryInfo(galleryInfo)
         db.localFavoritesDao().upsert(LocalFavoriteInfo(galleryInfo.gid))
         val syncfav = Settings.syncFav
@@ -373,7 +375,7 @@ object EhDB {
                     favoriteslot = galleryInfo.favoriteSlot,
                     op = "add",
                 )
-                sendExlApiRequest(exlar, sapi)
+                sendExlApiRequest(exlar, sapi, showSuccessToast)
             }
         }
     }
