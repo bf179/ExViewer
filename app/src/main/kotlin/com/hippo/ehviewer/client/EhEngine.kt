@@ -495,7 +495,7 @@ object EhEngine {
         // }
         // 避免遗留过多 (40个以上)
         val hidefav = Settings.hideFav
-        if (hidefav && filter && isNotEmpty()) { // 确保列表非空
+        if (hidefav && filter && isNotEmpty() && initialCount > 10) { // 确保列表非空
             val tempList = toList() // 创建不可变副本进行测试过滤
             val filteredCount = tempList.count { !filterFav(it) } // 计算过滤后剩余数量
             val keepCount = 2 // 需要保留的元素数量，可以为3
