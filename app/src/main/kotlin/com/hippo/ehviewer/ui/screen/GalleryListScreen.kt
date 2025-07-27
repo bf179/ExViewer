@@ -436,7 +436,8 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                                 }
                             }
                         },
-                        enabled = data.loadState.isIdle,
+                        // enabled = data.loadState.isIdle,
+                        enabled = true,
                     ) {
                         Icon(
                             imageVector = Icons.Default.Add,
