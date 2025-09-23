@@ -233,8 +233,9 @@ object EhEngine {
     }
 
     suspend fun getGalleryList(url: String) = ehRequest(url, EhUrl.referer).fetchUsingAsByteBuffer(GalleryListParser::parse)
-        .apply { galleryInfoList.fillInfo(url, true) }
-        .takeUnless { it.galleryInfoList.isEmpty() } ?: GalleryListParser.emptyResult
+        .takeIf { it.galleryInfoList.isNotEmpty() }
+        ?.apply { galleryInfoList.fillInfo(url, true) }
+        ?: GalleryListParser.emptyResult
 
     suspend fun getGalleryDetail(url: String) = ehRequest(url, EhUrl.referer).fetchUsingAsText {
         val eventPane = EventPaneParser.parse(this)
@@ -493,19 +494,20 @@ object EhEngine {
         //     }
         //     // 否则跳过 filterFav 过滤
         // }
+
         // 避免遗留过多 (40个以上)
         val hidefav = Settings.hideFav
-        if (hidefav && filter && isNotEmpty() && initialCount > 10) { // 确保列表非空
+        if (hidefav && filter && isNotEmpty() && initialCount > 7) { // 确保列表非空
             val tempList = toList() // 创建不可变副本进行测试过滤
             val filteredCount = tempList.count { !filterFav(it) } // 计算过滤后剩余数量
-            val keepCount = 2 // 需要保留的元素数量，可以为3
-            // 如果过滤后剩余数量小于2，计算需要保留的元素数量
+            val keepCount = 0 // 需要保留的元素数量，可以为1
+            // 如果过滤后剩余数量小于1，计算需要保留的元素数量
             if (filteredCount < keepCount) {
-                val itemsToKeep = tempList.take(keepCount) // 保留前2个元素
+                val itemsToKeep = tempList.take(keepCount) // 保留前1个元素
                 val itemsToFilterOut = tempList.subtract(itemsToKeep) // 找到需要过滤的元素
                 removeAllSuspend { itemsToFilterOut.contains(it) && filterFav(it) } // 过滤剩余的元素时同时检查filterFav条件(fix)
             } else {
-                // 如果过滤后仍有 ≥ 2 项，才完全执行过滤
+                // 如果过滤后仍有 ≥ 1 项，才完全执行过滤
                 removeAllSuspend { filterFav(it) }
             }
         }
@@ -514,14 +516,14 @@ object EhEngine {
         if (enablefilter && filter && isNotEmpty()) { // 确保列表非空
             val tempListg = toList() // 创建不可变副本进行测试过滤
             val filteredCountg = tempListg.count { !filterTagGroup(it) } // 计算过滤后剩余数量
-            val keepCountg = 2 // 需要保留的元素数量，可以为3
-            // 如果过滤后剩余数量小于2，计算需要保留的元素数量
+            val keepCountg = 1 // 需要保留的元素数量
+            // 如果过滤后剩余数量小于1，计算需要保留的元素数量
             if (filteredCountg < keepCountg) {
-                val itemsToKeepg = tempListg.take(keepCountg) // 保留前2个元素
+                val itemsToKeepg = tempListg.take(keepCountg) // 保留前1个元素
                 val itemsToFilterOutg = tempListg.subtract(itemsToKeepg) // 找到需要过滤的元素
                 removeAllSuspend { itemsToFilterOutg.contains(it) && filterTagGroup(it) } // 过滤剩余的元素时同时检查filterTagGroup条件(fix)
             } else {
-                // 如果过滤后仍有 ≥ 2 项，才完全执行过滤
+                // 如果过滤后仍有 ≥ 1 项，才完全执行过滤
                 removeAllSuspend { filterTagGroup(it) }
             }
         }
