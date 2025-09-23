@@ -818,6 +818,9 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
             launch {
                 try {
                     // 用于存储当前搜索状态用于快速恢复
+                    awaitConfirmationOrCancel {
+                        Text(text = "存储当前搜索状态?")
+                    }
                     val ffirstItem = data.itemSnapshotList.items[getFirstVisibleItemIndex()]
                     val fnext = ffirstItem.gid + 1
                     val text = "lastSearch@$fnext"
@@ -835,6 +838,9 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
             launch {
                 try {
                     // 快速恢复到存储的搜索状态
+                    awaitConfirmationOrCancel {
+                        Text(text = "恢复快速搜索状态?")
+                    }
                     val lastSearch = EhDB.getLastSearch()
                     lastSearch?.let { search ->
                         // 创建新的 UrlBuilder 并应用搜索条件
