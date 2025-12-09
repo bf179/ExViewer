@@ -405,7 +405,7 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                                 } else {
                                     if (data.itemSnapshotList.items.isEmpty()) {
                                         // 处理空列表情况
-                                        showSnackbar(invalidImageQuickSearch)
+                                        showSnackbar("列表为空")
                                         return@launch
                                     }
                                     // itemCount == 0 is treated as error, so no need to check here
@@ -902,7 +902,7 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                             // if (slowfav) {
                             //     delay(5000)
                             // }
-                            showSnackbar("少女祈祷中 ($successCount/${currentGalleryList.size})……")
+                            LaunchedEffect(Unit) { snackbarHostState.showSnackbar("少女祈祷中 ($successCount/${currentGalleryList.size})……")}
                         }
                         showSnackbar("成功收藏 $successCount/${currentGalleryList.size} 个画廊")
                     } catch (e: CancellationException) {
