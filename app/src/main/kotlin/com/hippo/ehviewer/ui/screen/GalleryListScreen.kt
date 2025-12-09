@@ -902,7 +902,7 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                             // if (slowfav) {
                             //     delay(5000)
                             // }
-                            Launch {
+                            launch {
                                 showSnackbar("少女祈祷中 ($successCount/${currentGalleryList.size})……")
                             }
                         }
