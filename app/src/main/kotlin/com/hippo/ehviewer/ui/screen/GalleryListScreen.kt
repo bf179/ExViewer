@@ -403,6 +403,11 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                                 if (urlBuilder.mode == MODE_IMAGE_SEARCH) {
                                     showSnackbar(invalidImageQuickSearch)
                                 } else {
+                                    if (data.itemSnapshotList.items.isEmpty()) {
+                                        // 处理空列表情况
+                                        showSnackbar(invalidImageQuickSearch)
+                                        return@launch
+                                    }
                                     // itemCount == 0 is treated as error, so no need to check here
                                     val firstItem = data.itemSnapshotList.items[getFirstVisibleItemIndex()]
                                     val next = firstItem.gid + 1
