@@ -893,7 +893,7 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                                 }
                             }
                             ensureActive()
-                            //delay(200) // 每组画廊处理完延迟200毫秒
+                            // delay(200) // 每组画廊处理完延迟200毫秒
                             // if (slowfav) {
                             //     delay(5000)
                             // }
