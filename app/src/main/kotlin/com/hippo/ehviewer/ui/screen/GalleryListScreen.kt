@@ -903,7 +903,7 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                             //     delay(5000)
                             // }
                             Launch {
-                                LaunchedEffect(Unit) { snackbarHostState.showSnackbar("少女祈祷中 ($successCount/${currentGalleryList.size})……") }
+                                showSnackbar("少女祈祷中 ($successCount/${currentGalleryList.size})……")
                             }
                         }
                         showSnackbar("成功收藏 $successCount/${currentGalleryList.size} 个画廊")
