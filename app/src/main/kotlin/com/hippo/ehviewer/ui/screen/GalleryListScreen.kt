@@ -902,7 +902,9 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                             // if (slowfav) {
                             //     delay(5000)
                             // }
-                            LaunchedEffect(Unit) { snackbarHostState.showSnackbar("少女祈祷中 ($successCount/${currentGalleryList.size})……")}
+                            Launch {
+                                LaunchedEffect(Unit) { snackbarHostState.showSnackbar("少女祈祷中 ($successCount/${currentGalleryList.size})……") }
+                            }
                         }
                         showSnackbar("成功收藏 $successCount/${currentGalleryList.size} 个画廊")
                     } catch (e: CancellationException) {
