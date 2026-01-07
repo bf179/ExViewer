@@ -542,6 +542,46 @@ fun BelowHeader(galleryDetail: GalleryDetail, voteTag: VoteTag) {
                 }
             },
         )
+        EhIconButton(
+            icon = Icons.Default.Search,
+            text = "提取搜索",
+            onClick = {
+                val keyword = EhUtils.extractTitle(galleryDetail.title)
+                val artistTag = galleryDetail.tagGroups.artistTag()
+
+                if (null != keyword) {
+                    // 提取第一个[]中的内容（包含[]）
+                    val pattern = Regex("""\[.*?\]""")
+                    val matchResult = pattern.find(keyword)
+                    val akeyword = if (matchResult != null) {
+                        matchResult.value
+                    } else {
+                        keyword // 如果没有匹配到[]，则使用原keyword
+                    }
+
+                    navigate(
+                        ListUrlBuilder(
+                            mode = ListUrlBuilder.MODE_NORMAL,
+                            mKeyword = "\"" + akeyword + "\"",
+                        ).asDst(),
+                    )
+                } else if (artistTag != null) {
+                    navigate(
+                        ListUrlBuilder(
+                            mode = ListUrlBuilder.MODE_TAG,
+                            mKeyword = artistTag,
+                        ).asDst(),
+                    )
+                } else if (null != galleryDetail.uploader) {
+                    navigate(
+                        ListUrlBuilder(
+                            mode = ListUrlBuilder.MODE_UPLOADER,
+                            mKeyword = galleryDetail.uploader,
+                        ).asDst(),
+                    )
+                }
+            },
+        )
         val signInFirst = stringResource(R.string.sign_in_first)
         val noArchive = stringResource(R.string.no_archives)
         val downloadStarted = stringResource(R.string.download_archive_started)
