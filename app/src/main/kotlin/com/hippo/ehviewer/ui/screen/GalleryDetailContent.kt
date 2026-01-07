@@ -546,7 +546,11 @@ fun BelowHeader(galleryDetail: GalleryDetail, voteTag: VoteTag) {
             icon = Icons.Default.Search,
             text = "提取",
             onClick = {
-                val keyword = galleryDetail.titleJpn ?: galleryDetail.title
+                val keyword = if (!galleryDetail.titleJpn.isNullOrBlank()) {
+                    galleryDetail.titleJpn
+                } else {
+                    galleryDetail.title
+                }
                 val artistTag = galleryDetail.tagGroups.artistTag()
 
                 if (null != keyword) {
