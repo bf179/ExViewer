@@ -544,7 +544,7 @@ fun BelowHeader(galleryDetail: GalleryDetail, voteTag: VoteTag) {
         )
         EhIconButton(
             icon = Icons.Default.Search,
-            text = "提取搜索",
+            text = "提取",
             onClick = {
                 val keyword = EhUtils.extractTitle(galleryDetail.title)
                 val artistTag = galleryDetail.tagGroups.artistTag()
