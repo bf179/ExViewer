@@ -54,6 +54,8 @@ import androidx.paging.compose.itemKey
 import com.hippo.ehviewer.R
 import com.hippo.ehviewer.Settings
 import com.hippo.ehviewer.client.data.BaseGalleryInfo
+import com.hippo.ehviewer.client.data.GalleryGroup
+import com.hippo.ehviewer.client.data.GroupMode
 import com.hippo.ehviewer.client.exception.NoHitsFoundException
 import com.hippo.ehviewer.coil.PrefetchAround
 import com.hippo.ehviewer.collectAsState
@@ -86,10 +88,13 @@ fun GalleryList(
     contentModifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues.Zero,
     listMode: Int,
+    groupMode: GroupMode = GroupMode.NONE,
     detailListState: LazyGridState = rememberLazyGridState(),
     detailItemContent: @Composable (LazyGridItemScope.(BaseGalleryInfo) -> Unit),
     thumbListState: LazyStaggeredGridState = rememberLazyStaggeredGridState(),
     thumbItemContent: @Composable (LazyStaggeredGridItemScope.(BaseGalleryInfo) -> Unit),
+    groupHeaderContent: @Composable (LazyGridItemScope.(GalleryGroup) -> Unit) = {},
+    thumbGroupHeaderContent: @Composable (LazyStaggeredGridItemScope.(GalleryGroup) -> Unit) = {},
     searchBarOffsetY: () -> Int,
     scrollToTopOnRefresh: Boolean = true,
     onRefresh: () -> Unit,
@@ -127,6 +132,13 @@ fun GalleryList(
         }
         if (listMode == 0) {
             val columnWidth by collectDetailSizeAsState()
+            val groups = remember(data.itemSnapshotList) {
+                if (groupMode != GroupMode.NONE) {
+                    data.itemSnapshotList.items.groupByMode(groupMode)
+                } else {
+                    emptyList()
+                }
+            }
             FastScrollLazyVerticalGrid(
                 columns = GridCells.Adaptive(columnWidth),
                 modifier = contentModifier,
@@ -135,15 +147,32 @@ fun GalleryList(
                 verticalArrangement = Arrangement.spacedBy(dimensionResource(R.dimen.gallery_list_interval)),
                 horizontalArrangement = Arrangement.spacedBy(dimensionResource(R.dimen.gallery_list_interval)),
             ) {
-                items(
-                    count = data.itemCount,
-                    key = data.itemKey(key = { item -> item.gid }),
-                    contentType = data.itemContentType(),
-                ) { index ->
-                    val info = data[index]
-                    if (info != null) {
-                        detailItemContent(info)
-                        PrefetchAround(data, index, 5, ::imageRequest)
+                if (groups.isNotEmpty()) {
+                    groups.forEach { group ->
+                        item(span = { GridItemSpan(maxCurrentLineSpan) }, key = "header-${group.key}") {
+                            groupHeaderContent(group)
+                        }
+                        group.items.forEachIndexed { idx, info ->
+                            val globalIndex = data.itemSnapshotList.items.indexOf(info)
+                            item(key = info.gid) {
+                                detailItemContent(info)
+                                if (globalIndex >= 0) {
+                                    PrefetchAround(data, globalIndex, 5, ::imageRequest)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    items(
+                        count = data.itemCount,
+                        key = data.itemKey(key = { item -> item.gid }),
+                        contentType = data.itemContentType(),
+                    ) { index ->
+                        val info = data[index]
+                        if (info != null) {
+                            detailItemContent(info)
+                            PrefetchAround(data, index, 5, ::imageRequest)
+                        }
                     }
                 }
                 if (showLoadStateIndicator) {

@@ -287,6 +287,12 @@
     <string name="delete_filter">Delete blocker \"%s\"?</string>
     <string name="add_filter">Add blocker</string>
     <string name="show_definition">Show definition</string>
+    <!-- Group Mode -->
+    <string name="group_mode_none">整理模式：关闭</string>
+    <string name="group_mode_artist">整理模式：按艺术家</string>
+    <string name="group_mode_group">整理模式：按团体</string>
+    <string name="group_mode_uploader">整理模式：按上传者</string>
+    <string name="group_count">%d 项</string>
     <string name="filter_text">Blocker text</string>
     <string name="filter_tip">This blocking system filters the result of EHentai website blocking system.\n\nTitle Blocker: exclude the gallery whose title contains the word.\n\nUploader Blocker: exclude the gallery which was uploaded by the uploader.\n\nTag Blocker: exclude the gallery which contain the tag, it takes more time to get gallery list.\n\nTag Namespace Blocker: exclude the gallery which contain the tag namespace, it takes more time to get gallery list.\n\nCommenter Blocker: exclude the comments posted by the commenter.\n\nComment Blocker: exclude the comments matching the regex.</string>
     <!-- Set Security -->

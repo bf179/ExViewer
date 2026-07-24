@@ -92,7 +92,9 @@ import com.hippo.ehviewer.client.EhFilter.remember
 import com.hippo.ehviewer.client.EhTagDatabase
 import com.hippo.ehviewer.client.EhUtils
 import com.hippo.ehviewer.client.data.BaseGalleryInfo
+import com.hippo.ehviewer.client.data.GalleryGroup
 import com.hippo.ehviewer.client.data.GalleryInfo.Companion.NOT_FAVORITED
+import com.hippo.ehviewer.client.data.GroupMode
 import com.hippo.ehviewer.client.data.ListUrlBuilder
 import com.hippo.ehviewer.client.data.ListUrlBuilder.Companion.MODE_IMAGE_SEARCH
 import com.hippo.ehviewer.client.data.ListUrlBuilder.Companion.MODE_NORMAL
@@ -641,6 +643,29 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
             IconButton(onClick = { launch { sheetState.open() } }) {
                 Icon(imageVector = Icons.Outlined.Bookmarks, contentDescription = stringResource(id = R.string.quick_search))
             }
+            val groupMode by Settings.groupMode.collectAsState()
+            val groupModeValue = GroupMode.fromValue(groupMode)
+            IconButton(
+                onClick = {
+                    val nextMode = when (groupModeValue) {
+                        GroupMode.NONE -> GroupMode.ARTIST
+                        GroupMode.ARTIST -> GroupMode.GROUP
+                        GroupMode.GROUP -> GroupMode.UPLOADER
+                        GroupMode.UPLOADER -> GroupMode.NONE
+                    }
+                    Settings.groupMode = nextMode.value
+                },
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Group,
+                    contentDescription = when (groupModeValue) {
+                        GroupMode.NONE -> stringResource(R.string.group_mode_none)
+                        GroupMode.ARTIST -> stringResource(R.string.group_mode_artist)
+                        GroupMode.GROUP -> stringResource(R.string.group_mode_group)
+                        GroupMode.UPLOADER -> stringResource(R.string.group_mode_uploader)
+                    },
+                )
+            }
             AvatarIcon()
         },
         filter = {
@@ -672,11 +697,14 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                 }
             }
         }
+        val groupMode by Settings.groupMode.collectAsState()
+        val groupModeValue = GroupMode.fromValue(groupMode)
         GalleryList(
             data = data,
             contentModifier = Modifier.nestedScroll(searchBarConnection),
             contentPadding = contentPadding,
             listMode = listMode,
+            groupMode = groupModeValue,
             detailListState = listState,
             detailItemContent = { info ->
                 GalleryInfoListItem(
@@ -735,6 +763,37 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                     info = info,
                     showPages = showPages,
                 )
+            },
+            groupHeaderContent = { group ->
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    shape = RoundedCornerShape(8.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Folder,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = group.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(
+                            text = stringResource(R.string.group_count, group.items.size),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             },
             searchBarOffsetY = { searchBarOffsetY },
             onRefresh = {
