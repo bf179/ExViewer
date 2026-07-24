@@ -104,7 +104,6 @@ import com.hippo.ehviewer.client.EhFilter.remember
 import com.hippo.ehviewer.client.EhTagDatabase
 import com.hippo.ehviewer.client.EhUtils
 import com.hippo.ehviewer.client.data.BaseGalleryInfo
-import com.hippo.ehviewer.client.data.GalleryGroup
 import com.hippo.ehviewer.client.data.GalleryInfo.Companion.NOT_FAVORITED
 import com.hippo.ehviewer.client.data.ListUrlBuilder
 import com.hippo.ehviewer.client.data.ListUrlBuilder.Companion.MODE_IMAGE_SEARCH
@@ -656,7 +655,7 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
             }
             val organizeMode by Settings.organizeMode.collectAsState()
             IconButton(
-                onClick = { Settings.organizeMode = !organizeMode },
+                onClick = { Settings.organizeMode.value = !organizeMode },
             ) {
                 Icon(
                     imageVector = if (organizeMode) Icons.Default.GroupWork else Icons.Outlined.GroupWork,
