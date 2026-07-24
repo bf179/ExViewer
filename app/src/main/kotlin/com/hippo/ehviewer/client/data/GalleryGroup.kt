@@ -25,6 +25,12 @@ fun BaseGalleryInfo.extractClusterKey(): String? {
     return artist ?: group
 }
 
+fun BaseGalleryInfo.extractTitleBracket(): String? {
+    val title = title ?: return null
+    val match = Regex("^\\[(.*?)\\]").find(title)
+    return match?.groupValues?.get(1)
+}
+
 fun BaseGalleryInfo.clusterDisplayName(): String {
     val tags = simpleTags ?: return "Unknown"
     for (tag in tags) {
@@ -40,14 +46,32 @@ fun BaseGalleryInfo.clusterDisplayName(): String {
 fun List<BaseGalleryInfo>.clusterByTag(): List<GroupListItem> {
     val groups = LinkedHashMap<String, GalleryGroup>()
     val orphanItems = mutableListOf<BaseGalleryInfo>()
+    val bracketToGroupKey = mutableMapOf<String, String>()
 
     forEach { info ->
-        val key = info.extractClusterKey()
-        if (key != null) {
-            val group = groups.getOrPut(key) {
-                GalleryGroup(key = key, name = info.clusterDisplayName())
+        val tagKey = info.extractClusterKey()
+        val bracketKey = info.extractTitleBracket()
+
+        if (tagKey != null) {
+            val group = groups.getOrPut(tagKey) {
+                GalleryGroup(key = tagKey, name = info.clusterDisplayName())
             }
             group.items.add(info)
+            if (bracketKey != null) {
+                bracketToGroupKey[bracketKey] = tagKey
+            }
+        } else if (bracketKey != null) {
+            val existingGroupKey = bracketToGroupKey[bracketKey]
+            if (existingGroupKey != null && groups.containsKey(existingGroupKey)) {
+                groups[existingGroupKey]?.items?.add(info)
+            } else {
+                val bracketTagKey = "bracket:$bracketKey"
+                val group = groups.getOrPut(bracketTagKey) {
+                    GalleryGroup(key = bracketTagKey, name = "[$bracketKey]")
+                }
+                group.items.add(info)
+                bracketToGroupKey[bracketKey] = bracketTagKey
+            }
         } else {
             orphanItems.add(info)
         }
