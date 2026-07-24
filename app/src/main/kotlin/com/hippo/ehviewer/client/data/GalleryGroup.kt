@@ -9,6 +9,7 @@ data class GalleryGroup(
 sealed class GroupListItem {
     data class Header(val group: GalleryGroup) : GroupListItem()
     data class Item(val info: BaseGalleryInfo, val groupKey: String) : GroupListItem()
+    data class Divider(val label: String) : GroupListItem()
 }
 
 fun BaseGalleryInfo.extractClusterKey(): String? {
@@ -78,6 +79,8 @@ fun List<BaseGalleryInfo>.clusterByTag(): List<GroupListItem> {
     }
 
     val result = mutableListOf<GroupListItem>()
+    val singleItemGroups = mutableListOf<GroupListItem.Item>()
+
     groups.values.forEach { group ->
         if (group.items.size > 1) {
             result.add(GroupListItem.Header(group))
@@ -86,10 +89,15 @@ fun List<BaseGalleryInfo>.clusterByTag(): List<GroupListItem> {
             }
         } else {
             group.items.forEach { info ->
-                result.add(GroupListItem.Item(info, ""))
+                singleItemGroups.add(GroupListItem.Item(info, ""))
             }
         }
     }
+    val totalUncategorized = singleItemGroups.size + orphanItems.size
+    if (result.isNotEmpty() && totalUncategorized > 0) {
+        result.add(GroupListItem.Divider("__UNCATEGORIZED__"))
+    }
+    result.addAll(singleItemGroups)
     orphanItems.forEach { info ->
         result.add(GroupListItem.Item(info, ""))
     }

@@ -95,6 +95,7 @@ fun GalleryList(
     thumbListState: LazyStaggeredGridState = rememberLazyStaggeredGridState(),
     thumbItemContent: @Composable (LazyStaggeredGridItemScope.(BaseGalleryInfo) -> Unit),
     groupHeaderContent: @Composable (LazyGridItemScope.(GalleryGroup) -> Unit) = {},
+    groupDividerContent: @Composable (LazyGridItemScope.(String) -> Unit) = {},
     searchBarOffsetY: () -> Int,
     scrollToTopOnRefresh: Boolean = true,
     onRefresh: () -> Unit,
@@ -153,6 +154,11 @@ fun GalleryList(
                             is GroupListItem.Header -> {
                                 item(span = { GridItemSpan(maxCurrentLineSpan) }, key = "header-${item.group.key}") {
                                     groupHeaderContent(item.group)
+                                }
+                            }
+                            is GroupListItem.Divider -> {
+                                item(span = { GridItemSpan(maxCurrentLineSpan) }, key = "divider-${item.label}-$index") {
+                                    groupDividerContent(item.label)
                                 }
                             }
                             is GroupListItem.Item -> {

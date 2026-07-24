@@ -5,6 +5,7 @@ import android.view.ViewConfiguration
 import androidx.activity.compose.ReportDrawnWhen
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -788,6 +789,34 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                }
+            },
+            groupDividerContent = { _ ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp, horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(1.dp)
+                            .clip(RoundedCornerShape(0.5.dp))
+                            .background(MaterialTheme.colorScheme.outlineVariant),
+                    )
+                    Text(
+                        text = stringResource(R.string.group_uncategorized),
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(1.dp)
+                            .clip(RoundedCornerShape(0.5.dp))
+                            .background(MaterialTheme.colorScheme.outlineVariant),
+                    )
                 }
             },
             searchBarOffsetY = { searchBarOffsetY },
