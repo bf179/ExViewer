@@ -55,9 +55,15 @@ fun List<BaseGalleryInfo>.clusterByTag(): List<GroupListItem> {
 
     val result = mutableListOf<GroupListItem>()
     groups.values.forEach { group ->
-        result.add(GroupListItem.Header(group))
-        group.items.forEach { info ->
-            result.add(GroupListItem.Item(info, group.key))
+        if (group.items.size > 1) {
+            result.add(GroupListItem.Header(group))
+            group.items.forEach { info ->
+                result.add(GroupListItem.Item(info, group.key))
+            }
+        } else {
+            group.items.forEach { info ->
+                result.add(GroupListItem.Item(info, ""))
+            }
         }
     }
     orphanItems.forEach { info ->

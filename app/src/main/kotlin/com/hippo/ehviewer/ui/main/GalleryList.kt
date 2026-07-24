@@ -158,9 +158,12 @@ fun GalleryList(
                             is GroupListItem.Item -> {
                                 val globalIndex = data.itemSnapshotList.items.indexOf(item.info)
                                 item(key = item.info.gid) {
-                                    detailItemContent(item.info)
                                     if (globalIndex >= 0) {
-                                        PrefetchAround(data, globalIndex, 5, ::imageRequest)
+                                        val galleryInfo = data[globalIndex]
+                                        if (galleryInfo != null) {
+                                            detailItemContent(galleryInfo)
+                                            PrefetchAround(data, globalIndex, 5, ::imageRequest)
+                                        }
                                     }
                                 }
                             }
