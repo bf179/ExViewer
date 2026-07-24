@@ -7,18 +7,24 @@ import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.material.icons.Icons
@@ -29,15 +35,20 @@ import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Flight
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.GroupWork
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Reorder
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.outlined.Bookmarks
+import androidx.compose.material.icons.outlined.GroupWork
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -66,6 +77,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.viewModelScope
@@ -94,7 +106,6 @@ import com.hippo.ehviewer.client.EhUtils
 import com.hippo.ehviewer.client.data.BaseGalleryInfo
 import com.hippo.ehviewer.client.data.GalleryGroup
 import com.hippo.ehviewer.client.data.GalleryInfo.Companion.NOT_FAVORITED
-import com.hippo.ehviewer.client.data.GroupMode
 import com.hippo.ehviewer.client.data.ListUrlBuilder
 import com.hippo.ehviewer.client.data.ListUrlBuilder.Companion.MODE_IMAGE_SEARCH
 import com.hippo.ehviewer.client.data.ListUrlBuilder.Companion.MODE_NORMAL
@@ -643,27 +654,13 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
             IconButton(onClick = { launch { sheetState.open() } }) {
                 Icon(imageVector = Icons.Outlined.Bookmarks, contentDescription = stringResource(id = R.string.quick_search))
             }
-            val groupMode by Settings.groupMode.collectAsState()
-            val groupModeValue = GroupMode.fromValue(groupMode)
+            val organizeMode by Settings.organizeMode.collectAsState()
             IconButton(
-                onClick = {
-                    val nextMode = when (groupModeValue) {
-                        GroupMode.NONE -> GroupMode.ARTIST
-                        GroupMode.ARTIST -> GroupMode.GROUP
-                        GroupMode.GROUP -> GroupMode.UPLOADER
-                        GroupMode.UPLOADER -> GroupMode.NONE
-                    }
-                    Settings.groupMode = nextMode.value
-                },
+                onClick = { Settings.organizeMode = !organizeMode },
             ) {
                 Icon(
-                    imageVector = Icons.Default.Group,
-                    contentDescription = when (groupModeValue) {
-                        GroupMode.NONE -> stringResource(R.string.group_mode_none)
-                        GroupMode.ARTIST -> stringResource(R.string.group_mode_artist)
-                        GroupMode.GROUP -> stringResource(R.string.group_mode_group)
-                        GroupMode.UPLOADER -> stringResource(R.string.group_mode_uploader)
-                    },
+                    imageVector = if (organizeMode) Icons.Default.GroupWork else Icons.Outlined.GroupWork,
+                    contentDescription = stringResource(R.string.organize_mode),
                 )
             }
             AvatarIcon()
@@ -697,14 +694,13 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                 }
             }
         }
-        val groupMode by Settings.groupMode.collectAsState()
-        val groupModeValue = GroupMode.fromValue(groupMode)
+        val organizeMode by Settings.organizeMode.collectAsState()
         GalleryList(
             data = data,
             contentModifier = Modifier.nestedScroll(searchBarConnection),
             contentPadding = contentPadding,
             listMode = listMode,
-            groupMode = groupModeValue,
+            organizeMode = organizeMode,
             detailListState = listState,
             detailItemContent = { info ->
                 GalleryInfoListItem(

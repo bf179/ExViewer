@@ -6,66 +6,62 @@ data class GalleryGroup(
     val items: MutableList<BaseGalleryInfo> = mutableListOf(),
 )
 
-enum class GroupMode(val value: Int) {
-    NONE(0),
-    ARTIST(1),
-    GROUP(2),
-    UPLOADER(3),
-    ;
+sealed class GroupListItem {
+    data class Header(val group: GalleryGroup) : GroupListItem()
+    data class Item(val info: BaseGalleryInfo, val groupKey: String) : GroupListItem()
+}
 
-    companion object {
-        fun fromValue(value: Int): GroupMode = when (value) {
-            1 -> ARTIST
-            2 -> GROUP
-            3 -> UPLOADER
-            else -> NONE
+fun BaseGalleryInfo.extractClusterKey(): String? {
+    val tags = simpleTags ?: return null
+    var artist: String? = null
+    var group: String? = null
+    for (tag in tags) {
+        if (tag.startsWith("artist:") || tag.startsWith("cosplayer:")) {
+            if (artist == null) artist = tag
+        } else if (tag.startsWith("group:")) {
+            if (group == null) group = tag
         }
     }
+    return artist ?: group
 }
 
-fun BaseGalleryInfo.getGroupKey(mode: GroupMode): String? {
-    return when (mode) {
-        GroupMode.ARTIST -> getArtistTag()
-        GroupMode.GROUP -> getGroupTag()
-        GroupMode.UPLOADER -> uploader?.takeIf { it.isNotBlank() && it != "(Disowned)" }
-        GroupMode.NONE -> null
+fun BaseGalleryInfo.clusterDisplayName(): String {
+    val tags = simpleTags ?: return "Unknown"
+    for (tag in tags) {
+        if (tag.startsWith("artist:")) return tag.substringAfter("artist:")
+        if (tag.startsWith("cosplayer:")) return tag.substringAfter("cosplayer:")
     }
-}
-
-fun BaseGalleryInfo.getArtistTag(): String? {
-    val detail = this as? GalleryDetail ?: return null
-    return detail.tagGroups.find { (ns, _) -> ns == TagNamespace.Artist || ns == TagNamespace.Cosplayer }
-        ?.tags?.firstOrNull()?.text
-}
-
-fun BaseGalleryInfo.getGroupTag(): String? {
-    val detail = this as? GalleryDetail ?: return null
-    return detail.tagGroups.find { (ns, _) -> ns == TagNamespace.Group }
-        ?.tags?.firstOrNull()?.text
-}
-
-fun BaseGalleryInfo.getGroupName(mode: GroupMode): String {
-    return when (mode) {
-        GroupMode.ARTIST -> getArtistTag() ?: "Unknown Artist"
-        GroupMode.GROUP -> getGroupTag() ?: "Unknown Group"
-        GroupMode.UPLOADER -> uploader ?: "Unknown Uploader"
-        GroupMode.NONE -> ""
+    for (tag in tags) {
+        if (tag.startsWith("group:")) return tag.substringAfter("group:")
     }
+    return "Unknown"
 }
 
-fun List<BaseGalleryInfo>.groupByMode(mode: GroupMode): List<GalleryGroup> {
-    if (mode == GroupMode.NONE) {
-        return emptyList()
-    }
-    val groups = mutableMapOf<String, GalleryGroup>()
+fun List<BaseGalleryInfo>.clusterByTag(): List<GroupListItem> {
+    val groups = LinkedHashMap<String, GalleryGroup>()
+    val orphanItems = mutableListOf<BaseGalleryInfo>()
+
     forEach { info ->
-        val key = info.getGroupKey(mode)
+        val key = info.extractClusterKey()
         if (key != null) {
             val group = groups.getOrPut(key) {
-                GalleryGroup(key = key, name = info.getGroupName(mode))
+                GalleryGroup(key = key, name = info.clusterDisplayName())
             }
             group.items.add(info)
+        } else {
+            orphanItems.add(info)
         }
     }
-    return groups.values.toList().sortedBy { it.name }
+
+    val result = mutableListOf<GroupListItem>()
+    groups.values.forEach { group ->
+        result.add(GroupListItem.Header(group))
+        group.items.forEach { info ->
+            result.add(GroupListItem.Item(info, group.key))
+        }
+    }
+    orphanItems.forEach { info ->
+        result.add(GroupListItem.Item(info, ""))
+    }
+    return result
 }

@@ -55,7 +55,8 @@ import com.hippo.ehviewer.R
 import com.hippo.ehviewer.Settings
 import com.hippo.ehviewer.client.data.BaseGalleryInfo
 import com.hippo.ehviewer.client.data.GalleryGroup
-import com.hippo.ehviewer.client.data.GroupMode
+import com.hippo.ehviewer.client.data.GroupListItem
+import com.hippo.ehviewer.client.data.clusterByTag
 import com.hippo.ehviewer.client.exception.NoHitsFoundException
 import com.hippo.ehviewer.coil.PrefetchAround
 import com.hippo.ehviewer.collectAsState
@@ -88,13 +89,12 @@ fun GalleryList(
     contentModifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues.Zero,
     listMode: Int,
-    groupMode: GroupMode = GroupMode.NONE,
+    organizeMode: Boolean = false,
     detailListState: LazyGridState = rememberLazyGridState(),
     detailItemContent: @Composable (LazyGridItemScope.(BaseGalleryInfo) -> Unit),
     thumbListState: LazyStaggeredGridState = rememberLazyStaggeredGridState(),
     thumbItemContent: @Composable (LazyStaggeredGridItemScope.(BaseGalleryInfo) -> Unit),
     groupHeaderContent: @Composable (LazyGridItemScope.(GalleryGroup) -> Unit) = {},
-    thumbGroupHeaderContent: @Composable (LazyStaggeredGridItemScope.(GalleryGroup) -> Unit) = {},
     searchBarOffsetY: () -> Int,
     scrollToTopOnRefresh: Boolean = true,
     onRefresh: () -> Unit,
@@ -132,9 +132,9 @@ fun GalleryList(
         }
         if (listMode == 0) {
             val columnWidth by collectDetailSizeAsState()
-            val groups = remember(data.itemSnapshotList) {
-                if (groupMode != GroupMode.NONE) {
-                    data.itemSnapshotList.items.groupByMode(groupMode)
+            val groupedItems = remember(data.itemSnapshotList, organizeMode) {
+                if (organizeMode) {
+                    data.itemSnapshotList.items.clusterByTag()
                 } else {
                     emptyList()
                 }
@@ -147,17 +147,21 @@ fun GalleryList(
                 verticalArrangement = Arrangement.spacedBy(dimensionResource(R.dimen.gallery_list_interval)),
                 horizontalArrangement = Arrangement.spacedBy(dimensionResource(R.dimen.gallery_list_interval)),
             ) {
-                if (groups.isNotEmpty()) {
-                    groups.forEach { group ->
-                        item(span = { GridItemSpan(maxCurrentLineSpan) }, key = "header-${group.key}") {
-                            groupHeaderContent(group)
-                        }
-                        group.items.forEachIndexed { idx, info ->
-                            val globalIndex = data.itemSnapshotList.items.indexOf(info)
-                            item(key = info.gid) {
-                                detailItemContent(info)
-                                if (globalIndex >= 0) {
-                                    PrefetchAround(data, globalIndex, 5, ::imageRequest)
+                if (groupedItems.isNotEmpty()) {
+                    groupedItems.forEachIndexed { index, item ->
+                        when (item) {
+                            is GroupListItem.Header -> {
+                                item(span = { GridItemSpan(maxCurrentLineSpan) }, key = "header-${item.group.key}") {
+                                    groupHeaderContent(item.group)
+                                }
+                            }
+                            is GroupListItem.Item -> {
+                                val globalIndex = data.itemSnapshotList.items.indexOf(item.info)
+                                item(key = item.info.gid) {
+                                    detailItemContent(item.info)
+                                    if (globalIndex >= 0) {
+                                        PrefetchAround(data, globalIndex, 5, ::imageRequest)
+                                    }
                                 }
                             }
                         }
@@ -176,7 +180,7 @@ fun GalleryList(
                     }
                 }
                 if (showLoadStateIndicator) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(span = { GridItemSpan(maxCurrentLineSpan) }) {
                         LoadStateIndicator(state = data.loadState.append) {
                             data.retry()
                         }
