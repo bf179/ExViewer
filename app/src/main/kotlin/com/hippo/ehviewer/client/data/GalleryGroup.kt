@@ -27,7 +27,7 @@ fun BaseGalleryInfo.extractClusterKey(): String? {
 
 fun BaseGalleryInfo.extractTitleBracket(): String? {
     val title = title ?: return null
-    val match = Regex("^\\[(.*?)\\]").find(title)
+    val match = Regex("^\\s*\\[(.*?)\\]").find(title)
     return match?.groupValues?.get(1)
 }
 
