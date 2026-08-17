@@ -22,6 +22,21 @@ interface HistoryDao {
     )
     fun joinListLazy(title: String): PagingSource<Int, BaseGalleryInfo>
 
+    @Query("SELECT GALLERIES.* FROM HISTORY JOIN GALLERIES USING(GID) WHERE FAVORITE_SLOT != -2 ORDER BY TIME DESC")
+    fun joinListLazyExcludeFav(): PagingSource<Int, BaseGalleryInfo>
+
+    @Query(
+        """SELECT GALLERIES.* FROM HISTORY JOIN GALLERIES USING(GID)
+        JOIN GALLERIES_FTS ON GALLERIES.rowid = docid WHERE GALLERIES_FTS MATCH :title AND FAVORITE_SLOT != -2 ORDER BY TIME DESC""",
+    )
+    fun joinListLazyExcludeFav(title: String): PagingSource<Int, BaseGalleryInfo>
+
+    @Query("SELECT GALLERIES.* FROM HISTORY JOIN GALLERIES USING(GID) ORDER BY TIME DESC")
+    suspend fun joinList(): List<BaseGalleryInfo>
+
+    @Query("DELETE FROM HISTORY WHERE GID IN (:gids)")
+    suspend fun deleteByKeyRange(gids: List<Long>)
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertOrIgnore(historyInfoList: List<HistoryInfo>)
 
