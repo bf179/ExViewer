@@ -355,7 +355,9 @@ suspend fun doGalleryInfoAction(
                 3 -> showMoveDownloadLabel(info)
             }
 
-            extraAction != null && selected == baseCount -> withIOContext { onExtraAction() }
+            baseCount -> if (extraAction != null) {
+                withIOContext { onExtraAction() }
+            }
         }
         true
     }

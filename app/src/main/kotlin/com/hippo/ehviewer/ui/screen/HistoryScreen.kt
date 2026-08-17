@@ -60,6 +60,7 @@ import com.hippo.ehviewer.ui.main.plus
 import com.hippo.ehviewer.ui.removeHistoryBySameArtistOrGroupWithConfirm
 import com.hippo.ehviewer.ui.tools.Await
 import com.hippo.ehviewer.ui.tools.FastScrollLazyColumn
+import com.hippo.ehviewer.ui.tools.observed
 import com.hippo.ehviewer.ui.tools.rememberInVM
 import com.hippo.ehviewer.ui.tools.thenIf
 import com.hippo.ehviewer.util.FavouriteStatusRouter
@@ -85,13 +86,15 @@ fun AnimatedVisibilityScope.HistoryScreen(navigator: DestinationsNavigator) = Sc
     DrawerHandle(!searchBarExpanded)
 
     val density = LocalDensity.current
-    val hideFavInHistory by Settings.hideFavInHistory.collectAsState()
+    val hideFavInHistory by Settings::hideFavInHistory.observed
     val historyData = rememberInVM(hideFavInHistory) {
         Pager(config = PagingConfig(pageSize = 20, jumpThreshold = 40)) {
             when {
-                keyword.isNotEmpty() ->
-                    if (hideFavInHistory) EhDB.searchHistoryExcludeFav(keyword)
-                    else EhDB.searchHistory(keyword)
+                keyword.isNotEmpty() -> if (hideFavInHistory) {
+                    EhDB.searchHistoryExcludeFav(keyword)
+                } else {
+                    EhDB.searchHistory(keyword)
+                }
 
                 hideFavInHistory -> EhDB.historyLazyListExcludeFav
                 else -> EhDB.historyLazyList
