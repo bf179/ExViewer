@@ -230,14 +230,14 @@ suspend fun removeHistoryBySameArtistOrGroupWithConfirm(info: BaseGalleryInfo) {
         showTip(R.string.no_matching_gallery_found)
         return
     }
-    val confirmed = awaitConfirmationOrCancel(
+    // 用户点"取消"时 awaitConfirmationOrCancel 通过 cont.cancel() 抛 CancellationException，
+    // 会中断后续代码，因此无需判断返回值；走到这里即代表用户已确认
+    awaitConfirmationOrCancel(
         confirmText = R.string.remove,
         text = { Text(stringResource(R.string.remove_same_artist_group_message, count)) },
     )
-    if (confirmed) {
-        val removed = withIOContext { EhDB.removeHistoryBySameArtistOrGroup(info) }
-        if (removed > 0) showTip(R.string.removed_n_galleries, removed) else showTip(R.string.no_matching_gallery_found)
-    }
+    val removed = withIOContext { EhDB.removeHistoryBySameArtistOrGroup(info) }
+    if (removed > 0) showTip(R.string.removed_n_galleries, removed) else showTip(R.string.no_matching_gallery_found)
 }
 ```
 
