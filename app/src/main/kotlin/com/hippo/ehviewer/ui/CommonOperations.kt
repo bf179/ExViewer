@@ -35,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -291,9 +292,14 @@ fun DestinationsNavigator.navToReader(uri: Uri) = navToReader(ReaderScreenArgs.A
 private fun DestinationsNavigator.navToReader(args: ReaderScreenArgs) = navigate(ReaderScreenDestination(args)) { launchSingleTop = true }
 
 context(DialogState, Context, DestinationsNavigator)
-suspend fun doGalleryInfoAction(info: BaseGalleryInfo) {
+suspend fun doGalleryInfoAction(
+    info: BaseGalleryInfo,
+    extraAction: Pair<ImageVector, Int>? = null,
+    onExtraAction: suspend () -> Unit = {},
+) {
     val downloaded = DownloadManager.getDownloadState(info.gid) != DownloadInfo.STATE_INVALID
     val favorited = info.favoriteSlot != NOT_FAVORITED
+    val baseCount = if (downloaded) 4 else 3
     val items = buildList {
         add(Icons.AutoMirrored.Default.MenuBook to R.string.read)
         val download = if (downloaded) {
@@ -311,40 +317,45 @@ suspend fun doGalleryInfoAction(info: BaseGalleryInfo) {
         if (downloaded) {
             add(Icons.AutoMirrored.Default.DriveFileMove to R.string.download_move_dialog_title)
         }
+        extraAction?.let { add(it) }
     }
     val selected = awaitSelectItemWithIcon(items, EhUtils.getSuitableTitle(info))
     with(findActivity<MainActivity>()) {
         when (selected) {
-            0 -> {
-                EhDB.putHistoryInfo(info)
-                navToReader(info)
-            }
+            in 0 until baseCount -> when (selected) {
+                0 -> {
+                    EhDB.putHistoryInfo(info)
+                    navToReader(info)
+                }
 
-            1 -> withUIContext {
-                if (downloaded) {
-                    confirmRemoveDownload(info)
+                1 -> withUIContext {
+                    if (downloaded) {
+                        confirmRemoveDownload(info)
+                    } else {
+                        startDownload(this@with, false, info)
+                    }
+                }
+
+                2 -> if (favorited) {
+                    runSuspendCatching {
+                        removeFromFavorites(info)
+                        showTip(R.string.remove_from_favorite_success)
+                    }.onFailure {
+                        showTip(R.string.remove_from_favorite_failure)
+                    }
                 } else {
-                    startDownload(this@with, false, info)
+                    runSuspendCatching {
+                        modifyFavorites(info)
+                        showTip(R.string.add_to_favorite_success)
+                    }.onFailure {
+                        showTip(R.string.add_to_favorite_failure)
+                    }
                 }
+
+                3 -> showMoveDownloadLabel(info)
             }
 
-            2 -> if (favorited) {
-                runSuspendCatching {
-                    removeFromFavorites(info)
-                    showTip(R.string.remove_from_favorite_success)
-                }.onFailure {
-                    showTip(R.string.remove_from_favorite_failure)
-                }
-            } else {
-                runSuspendCatching {
-                    modifyFavorites(info)
-                    showTip(R.string.add_to_favorite_success)
-                }.onFailure {
-                    showTip(R.string.add_to_favorite_failure)
-                }
-            }
-
-            3 -> showMoveDownloadLabel(info)
+            extraAction != null && selected == baseCount -> withIOContext { onExtraAction() }
         }
         true
     }
