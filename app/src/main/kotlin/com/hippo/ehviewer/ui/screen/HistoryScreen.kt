@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ClearAll
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -56,6 +57,7 @@ import com.hippo.ehviewer.ui.Screen
 import com.hippo.ehviewer.ui.doGalleryInfoAction
 import com.hippo.ehviewer.ui.main.GalleryInfoListItem
 import com.hippo.ehviewer.ui.main.plus
+import com.hippo.ehviewer.ui.removeHistoryBySameArtistOrGroupWithConfirm
 import com.hippo.ehviewer.ui.tools.Await
 import com.hippo.ehviewer.ui.tools.FastScrollLazyColumn
 import com.hippo.ehviewer.ui.tools.rememberInVM
@@ -83,12 +85,16 @@ fun AnimatedVisibilityScope.HistoryScreen(navigator: DestinationsNavigator) = Sc
     DrawerHandle(!searchBarExpanded)
 
     val density = LocalDensity.current
+    val hideFavInHistory by Settings.hideFavInHistory.collectAsState()
     val historyData = rememberInVM {
         Pager(config = PagingConfig(pageSize = 20, jumpThreshold = 40)) {
-            if (keyword.isNotEmpty()) {
-                EhDB.searchHistory(keyword)
-            } else {
-                EhDB.historyLazyList
+            when {
+                keyword.isNotEmpty() ->
+                    if (hideFavInHistory) EhDB.searchHistoryExcludeFav(keyword)
+                    else EhDB.searchHistory(keyword)
+
+                hideFavInHistory -> EhDB.historyLazyListExcludeFav
+                else -> EhDB.historyLazyList
             }
         }.flow.map { data ->
             val favCat = Settings.favCat
@@ -163,7 +169,16 @@ fun AnimatedVisibilityScope.HistoryScreen(navigator: DestinationsNavigator) = Sc
                     ) {
                         GalleryInfoListItem(
                             onClick = { navigate(info.asDst()) },
-                            onLongClick = { launch { doGalleryInfoAction(info) } },
+                            onLongClick = {
+                                launch {
+                                    doGalleryInfoAction(
+                                        info,
+                                        extraAction = Icons.Default.DeleteSweep to R.string.remove_same_artist_group,
+                                    ) {
+                                        removeHistoryBySameArtistOrGroupWithConfirm(info)
+                                    }
+                                }
+                            },
                             info = info,
                             showPages = showPages,
                             modifier = Modifier.height(cardHeight),
