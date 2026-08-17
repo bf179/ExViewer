@@ -86,7 +86,7 @@ fun AnimatedVisibilityScope.HistoryScreen(navigator: DestinationsNavigator) = Sc
 
     val density = LocalDensity.current
     val hideFavInHistory by Settings.hideFavInHistory.collectAsState()
-    val historyData = rememberInVM {
+    val historyData = rememberInVM(hideFavInHistory) {
         Pager(config = PagingConfig(pageSize = 20, jumpThreshold = 40)) {
             when {
                 keyword.isNotEmpty() ->
