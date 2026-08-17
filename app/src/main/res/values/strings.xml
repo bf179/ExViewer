@@ -467,6 +467,7 @@
     <string name="remove_same_artist_group_message">将移除历史中与该作者/社团相关的 %d 个画廊，是否继续？</string>
     <string name="removed_n_galleries">已移除 %d 个画廊</string>
     <string name="no_matching_gallery_found">未找到匹配的画廊</string>
+    <string name="remove">移除</string>
     <string name="download_service">Download Service</string>
     <string name="favorite_name">Favorite</string>
     <string name="dark_theme">Dark theme</string>

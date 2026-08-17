@@ -361,6 +361,25 @@ suspend fun doGalleryInfoAction(
     }
 }
 
+context(DialogState, Context, DestinationsNavigator)
+suspend fun removeHistoryBySameArtistOrGroupWithConfirm(info: BaseGalleryInfo) {
+    val count = withIOContext { EhDB.countHistoryBySameArtistOrGroup(info) }
+    if (count == 0) {
+        showTip(R.string.no_matching_gallery_found)
+        return
+    }
+    awaitConfirmationOrCancel(
+        confirmText = R.string.remove,
+        text = { Text(stringResource(R.string.remove_same_artist_group_message, count)) },
+    )
+    val removed = withIOContext { EhDB.removeHistoryBySameArtistOrGroup(info) }
+    if (removed > 0) {
+        showTip(appCtx.getString(R.string.removed_n_galleries, removed))
+    } else {
+        showTip(R.string.no_matching_gallery_found)
+    }
+}
+
 private const val MAX_FAVNOTE_CHAR = 200
 
 private suspend fun DialogState.confirmRemoveDownload(text: String): Boolean {
