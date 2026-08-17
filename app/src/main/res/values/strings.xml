@@ -461,6 +461,12 @@
     <string name="clear_search_history_summary">Remove searches you have performed from this device</string>
     <string name="clear_search_history_confirm">Clear search history?</string>
     <string name="search_history_cleared">Search history cleared</string>
+    <string name="settings_hide_fav_in_history">[Self] 隐藏历史中已收藏画廊</string>
+    <string name="settings_hide_fav_in_history_summary">在历史列表中隐藏已收藏（本地+云端）的画廊</string>
+    <string name="remove_same_artist_group">移除同作者/同社团画廊</string>
+    <string name="remove_same_artist_group_message">将移除历史中与该作者/社团相关的 %d 个画廊，是否继续？</string>
+    <string name="removed_n_galleries">已移除 %d 个画廊</string>
+    <string name="no_matching_gallery_found">未找到匹配的画廊</string>
     <string name="download_service">Download Service</string>
     <string name="favorite_name">Favorite</string>
     <string name="dark_theme">Dark theme</string>

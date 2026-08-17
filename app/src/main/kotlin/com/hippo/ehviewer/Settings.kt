@@ -184,6 +184,7 @@ object Settings : DataStorePreferences(null) {
     var papiUrl by stringOrNullPref("papi_url", null)
     var addKeyword by stringOrNullPref("add_keyword", null)
     var hideFav by boolPref("hide_fav", true)
+    var hideFavInHistory by boolPref("hide_fav_in_history", false)
     var debugFilter by boolPref("debug_filter", false)
     var disableFilter by boolPref("disable_filter", false)
     var quickFav by boolPref("quick_fav", false)
