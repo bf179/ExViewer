@@ -439,6 +439,11 @@ object EhDB {
 
     fun searchHistory(keyword: String) = db.historyDao().joinListLazy("*$keyword*")
 
+    val historyLazyListExcludeFav
+        get() = db.historyDao().joinListLazyExcludeFav()
+
+    fun searchHistoryExcludeFav(keyword: String) = db.historyDao().joinListLazyExcludeFav("*$keyword*")
+
     val localFavLazyList
         get() = db.localFavoritesDao().joinListLazy()
 
@@ -476,6 +481,34 @@ object EhDB {
         val historyList = dao.list()
         dao.deleteAll()
         historyList.forEach { runCatching { db.galleryDao().deleteByKey(it.gid) } }
+    }
+
+    private fun BaseGalleryInfo.artistGroupKeys(): Set<String> = buildSet {
+        simpleTags.orEmpty().forEach { tag ->
+            when {
+                tag.startsWith("artist:") || tag.startsWith("cosplayer:") || tag.startsWith("group:") -> add(tag)
+            }
+        }
+    }
+
+    suspend fun countHistoryBySameArtistOrGroup(target: BaseGalleryInfo): Int {
+        val keys = target.artistGroupKeys()
+        if (keys.isEmpty()) return 0
+        return db.historyDao().joinList().count {
+            it.gid != target.gid && it.simpleTags.orEmpty().any(keys::contains)
+        }
+    }
+
+    suspend fun removeHistoryBySameArtistOrGroup(target: BaseGalleryInfo): Int {
+        val keys = target.artistGroupKeys()
+        if (keys.isEmpty()) return 0
+        val toDelete = db.historyDao().joinList()
+            .filter { it.gid != target.gid && it.simpleTags.orEmpty().any(keys::contains) }
+            .map { it.gid }
+        if (toDelete.isNotEmpty()) {
+            db.historyDao().deleteByKeyRange(toDelete)
+        }
+        return toDelete.size
     }
 
     suspend fun getAllFilter() = db.filterDao().list()
