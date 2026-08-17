@@ -58,12 +58,12 @@ git commit -m "feat: add hideFavInHistory setting and related strings"
 在 `joinListLazy(title)` 之后新增：
 
 ```kotlin
-@Query("SELECT GALLERIES.* FROM HISTORY JOIN GALLERIES USING(GID) WHERE FAVORITE_SLOT != -2 ORDER BY TIME DESC")
+@Query("SELECT GALLERIES.* FROM HISTORY JOIN GALLERIES USING(GID) WHERE FAVORITE_SLOT = -2 ORDER BY TIME DESC")
 fun joinListLazyExcludeFav(): PagingSource<Int, BaseGalleryInfo>
 
 @Query(
     """SELECT GALLERIES.* FROM HISTORY JOIN GALLERIES USING(GID)
-    JOIN GALLERIES_FTS ON GALLERIES.rowid = docid WHERE GALLERIES_FTS MATCH :title AND FAVORITE_SLOT != -2 ORDER BY TIME DESC""",
+    JOIN GALLERIES_FTS ON GALLERIES.rowid = docid WHERE GALLERIES_FTS MATCH :title AND FAVORITE_SLOT = -2 ORDER BY TIME DESC""",
 )
 fun joinListLazyExcludeFav(title: String): PagingSource<Int, BaseGalleryInfo>
 
@@ -74,7 +74,7 @@ suspend fun joinList(): List<BaseGalleryInfo>
 suspend fun deleteByKeyRange(gids: List<Long>)
 ```
 
-> 说明：`FAVORITE_SLOT != -2` 即 `!= NOT_FAVORITED`，同时排除本地收藏（-1）与云端收藏（0..9）。`NOT_FAVORITED = -2` 定义于 `GalleryInfo.Companion`，DAO 中直接写字面量（Room 查询不支持引用 Kotlin 常量）。
+> 说明：`FAVORITE_SLOT = -2` 即 `= NOT_FAVORITED`，仅保留未收藏记录，从而隐藏已收藏（本地 -1 与云端 0..9）。`NOT_FAVORITED = -2` 定义于 `GalleryInfo.Companion`，DAO 中直接写字面量（Room 查询不支持引用 Kotlin 常量）。
 
 - [ ] **Step 2: Commit**
 
