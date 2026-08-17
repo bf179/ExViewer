@@ -505,9 +505,7 @@ object EhDB {
         val toDelete = db.historyDao().joinList()
             .filter { it.gid != target.gid && it.simpleTags.orEmpty().any(keys::contains) }
             .map { it.gid }
-        if (toDelete.isNotEmpty()) {
-            db.historyDao().deleteByKeyRange(toDelete)
-        }
+        toDelete.chunked(500).forEach { db.historyDao().deleteByKeyRange(it) }
         return toDelete.size
     }
 

@@ -363,8 +363,8 @@ suspend fun doGalleryInfoAction(
 
 context(DialogState, Context, DestinationsNavigator)
 suspend fun removeHistoryBySameArtistOrGroupWithConfirm(info: BaseGalleryInfo) {
-    val count = withIOContext { EhDB.countHistoryBySameArtistOrGroup(info) }
-    if (count == 0) {
+    val count = runSuspendCatching { withIOContext { EhDB.countHistoryBySameArtistOrGroup(info) } }.getOrNull()
+    if (count == null || count == 0) {
         with(findActivity<MainActivity>()) { showTip(R.string.no_matching_gallery_found) }
         return
     }
@@ -372,9 +372,11 @@ suspend fun removeHistoryBySameArtistOrGroupWithConfirm(info: BaseGalleryInfo) {
         confirmText = R.string.remove,
         text = { Text(stringResource(R.string.remove_same_artist_group_message, count)) },
     )
-    val removed = withIOContext { EhDB.removeHistoryBySameArtistOrGroup(info) }
+    val removed = runSuspendCatching { withIOContext { EhDB.removeHistoryBySameArtistOrGroup(info) } }.getOrNull()
     val activity = findActivity<MainActivity>()
-    if (removed > 0) {
+    if (removed == null) {
+        activity.showTip(R.string.remove_history_failed)
+    } else if (removed > 0) {
         activity.showTip(appCtx.getString(R.string.removed_n_galleries, removed))
     } else {
         activity.showTip(R.string.no_matching_gallery_found)
