@@ -24,6 +24,7 @@ import arrow.fx.coroutines.resourceScope
 import com.hippo.ehviewer.EhApplication.Companion.ktorClient
 import com.hippo.ehviewer.Settings
 import com.hippo.ehviewer.client.data.BaseGalleryInfo
+import com.hippo.ehviewer.client.data.GalleryInfo.Companion.NOT_FAVORITED
 import com.hippo.ehviewer.dao.DownloadArtist
 import com.hippo.ehviewer.dao.DownloadDirname
 import com.hippo.ehviewer.dao.DownloadInfo
@@ -483,31 +484,75 @@ object EhDB {
         historyList.forEach { runCatching { db.galleryDao().deleteByKey(it.gid) } }
     }
 
-    private fun BaseGalleryInfo.artistGroupKeys(): Set<String> = buildSet {
+    private data class IdentityBare(val artists: Set<String>, val groups: Set<String>) {
+        val required: Set<String> get() = artists + groups
+        fun isEmpty() = required.isEmpty()
+    }
+
+    private fun String.bareValue() = removePrefix("_").let { if (':' in it) it.substringAfterLast(':') else it }
+
+    private fun BaseGalleryInfo.extractIdentityBare(): IdentityBare {
+        val artists = mutableSetOf<String>()
+        val groups = mutableSetOf<String>()
         simpleTags.orEmpty().forEach { raw ->
             val tag = raw.removePrefix("_")
-            when {
-                tag.startsWith("artist:") || tag.startsWith("cosplayer:") || tag.startsWith("group:") -> add(tag)
+            val sep = tag.indexOf(':')
+            if (sep < 0) return@forEach
+            val ns = tag.substring(0, sep)
+            val value = tag.substring(sep + 1)
+            when (ns) {
+                "artist", "cosplayer" -> artists.add(value)
+                "group" -> groups.add(value)
             }
         }
+        return IdentityBare(artists, groups)
     }
 
-    suspend fun countHistoryBySameArtistOrGroup(target: BaseGalleryInfo): Int {
-        val keys = target.artistGroupKeys()
-        if (keys.isEmpty()) return 0
-        return db.historyDao().joinList().count {
-            it.gid != target.gid && it.simpleTags.orEmpty().any { raw -> raw.removePrefix("_") in keys }
+    private fun List<String>.candidateBareSet() = buildSet {
+        this@candidateBareSet.forEach { add(it.bareValue()) }
+    }
+
+    private fun BaseGalleryInfo.isFavorited() = favoriteSlot != NOT_FAVORITED
+
+    data class MatchSummary(val totalMatching: Int, val matchingFavorited: Int) {
+        val matchingUnfavorited: Int get() = totalMatching - matchingFavorited
+    }
+
+    suspend fun countHistoryBySameArtistOrGroup(target: BaseGalleryInfo): MatchSummary {
+        val identity = target.extractIdentityBare()
+        if (identity.isEmpty()) return MatchSummary(0, 0)
+        val required = identity.required
+        var total = 0
+        var favorited = 0
+        db.historyDao().joinList().forEach {
+            if (it.gid == target.gid) return@forEach
+            if (it.simpleTags.orEmpty().candidateBareSet().containsAll(required)) {
+                total++
+                if (it.isFavorited()) favorited++
+            }
         }
+        return MatchSummary(total, favorited)
     }
 
-    suspend fun removeHistoryBySameArtistOrGroup(target: BaseGalleryInfo): Int {
-        val keys = target.artistGroupKeys()
-        if (keys.isEmpty()) return 0
-        val toDelete = db.historyDao().joinList()
-            .filter { it.gid != target.gid && it.simpleTags.orEmpty().any { raw -> raw.removePrefix("_") in keys } }
-            .map { it.gid }
+    data class RemovalResult(val removed: Int, val totalMatching: Int) {
+        val untouchedMatching: Int get() = totalMatching - removed
+    }
+
+    suspend fun removeHistoryBySameArtistOrGroup(target: BaseGalleryInfo): RemovalResult {
+        val identity = target.extractIdentityBare()
+        if (identity.isEmpty()) return RemovalResult(0, 0)
+        val required = identity.required
+        var totalMatching = 0
+        val toDelete = mutableListOf<Long>()
+        db.historyDao().joinList().forEach {
+            if (it.gid == target.gid) return@forEach
+            if (it.simpleTags.orEmpty().candidateBareSet().containsAll(required)) {
+                totalMatching++
+                if (it.isFavorited()) toDelete.add(it.gid)
+            }
+        }
         toDelete.chunked(500).forEach { db.historyDao().deleteByKeyRange(it) }
-        return toDelete.size
+        return RemovalResult(removed = toDelete.size, totalMatching = totalMatching)
     }
 
     suspend fun getAllFilter() = db.filterDao().list()

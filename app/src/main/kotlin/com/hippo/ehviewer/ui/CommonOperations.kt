@@ -365,21 +365,40 @@ suspend fun doGalleryInfoAction(
 
 context(DialogState, Context, DestinationsNavigator)
 suspend fun removeHistoryBySameArtistOrGroupWithConfirm(info: BaseGalleryInfo) {
-    val count = runSuspendCatching { withIOContext { EhDB.countHistoryBySameArtistOrGroup(info) } }.getOrNull()
-    if (count == null || count == 0) {
-        with(findActivity<MainActivity>()) { showTip(R.string.no_matching_gallery_found) }
+    val summary = runSuspendCatching { withIOContext { EhDB.countHistoryBySameArtistOrGroup(info) } }.getOrNull()
+    val activity = findActivity<MainActivity>()
+    if (summary == null) {
+        activity.showTip(R.string.remove_history_failed)
+        return
+    }
+    if (summary.totalMatching == 0) {
+        activity.showTip(R.string.no_matching_gallery_found)
+        return
+    }
+    if (summary.matchingFavorited == 0) {
+        activity.showTip(appCtx.getString(R.string.no_favorited_matching_gallery, summary.totalMatching))
         return
     }
     awaitConfirmationOrCancel(
         confirmText = R.string.remove,
-        text = { Text(stringResource(R.string.remove_same_artist_group_message, count)) },
+        text = {
+            Text(
+                stringResource(
+                    id = R.string.remove_same_artist_group_message,
+                    summary.totalMatching,
+                    summary.matchingFavorited,
+                    summary.matchingUnfavorited,
+                ),
+            )
+        },
     )
-    val removed = runSuspendCatching { withIOContext { EhDB.removeHistoryBySameArtistOrGroup(info) } }.getOrNull()
-    val activity = findActivity<MainActivity>()
-    if (removed == null) {
+    val result = runSuspendCatching { withIOContext { EhDB.removeHistoryBySameArtistOrGroup(info) } }.getOrNull()
+    if (result == null) {
         activity.showTip(R.string.remove_history_failed)
-    } else if (removed > 0) {
-        activity.showTip(appCtx.getString(R.string.removed_n_galleries, removed))
+    } else if (result.removed > 0) {
+        activity.showTip(appCtx.getString(R.string.removed_n_of_matched_galleries, result.removed, result.totalMatching))
+    } else if (result.totalMatching > 0) {
+        activity.showTip(appCtx.getString(R.string.no_favorited_matching_gallery, result.totalMatching))
     } else {
         activity.showTip(R.string.no_matching_gallery_found)
     }
