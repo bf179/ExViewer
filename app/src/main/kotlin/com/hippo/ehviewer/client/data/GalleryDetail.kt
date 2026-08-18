@@ -59,8 +59,11 @@ data class GalleryDetail(
     fun fillInfo() {
         val index = LANGUAGES.indexOf(language)
         if (index != -1) simpleLanguage = S_LANGS[index]
-        simpleTags = tagGroups.fastFlatMap(GalleryTagGroup::tags).map { (text, power, _) ->
-            if (power == PowerStatus.WEAK) "_$text" else text
+        simpleTags = tagGroups.fastFlatMap { group ->
+            val ns = group.nameSpace.value + ':'
+            group.tags.map { (text, power, _) ->
+                if (power == PowerStatus.WEAK) "_$ns$text" else ns + text
+            }
         }
     }
 }

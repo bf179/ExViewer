@@ -484,7 +484,8 @@ object EhDB {
     }
 
     private fun BaseGalleryInfo.artistGroupKeys(): Set<String> = buildSet {
-        simpleTags.orEmpty().forEach { tag ->
+        simpleTags.orEmpty().forEach { raw ->
+            val tag = raw.removePrefix("_")
             when {
                 tag.startsWith("artist:") || tag.startsWith("cosplayer:") || tag.startsWith("group:") -> add(tag)
             }
@@ -495,7 +496,7 @@ object EhDB {
         val keys = target.artistGroupKeys()
         if (keys.isEmpty()) return 0
         return db.historyDao().joinList().count {
-            it.gid != target.gid && it.simpleTags.orEmpty().any(keys::contains)
+            it.gid != target.gid && it.simpleTags.orEmpty().any { raw -> raw.removePrefix("_") in keys }
         }
     }
 
@@ -503,7 +504,7 @@ object EhDB {
         val keys = target.artistGroupKeys()
         if (keys.isEmpty()) return 0
         val toDelete = db.historyDao().joinList()
-            .filter { it.gid != target.gid && it.simpleTags.orEmpty().any(keys::contains) }
+            .filter { it.gid != target.gid && it.simpleTags.orEmpty().any { raw -> raw.removePrefix("_") in keys } }
             .map { it.gid }
         toDelete.chunked(500).forEach { db.historyDao().deleteByKeyRange(it) }
         return toDelete.size
