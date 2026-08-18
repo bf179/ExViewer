@@ -427,6 +427,22 @@ object EhEngine {
         }
     }
 
+    suspend fun getGalleryNamespacedTags(gid: Long, token: String): List<String> {
+        val json = ehRequest(EhUrl.apiUrl, EhUrl.referer, EhUrl.origin) {
+            jsonBody {
+                put("method", "gdata")
+                array("gidlist") {
+                    addJsonArray {
+                        add(gid)
+                        add(token)
+                    }
+                }
+                put("namespace", 1)
+            }
+        }.fetchUsingAsText()
+        return GalleryApiParser.parseSingleTags(json, gid) ?: emptyList()
+    }
+
     suspend fun voteComment(apiUid: Long, apiKey: String?, gid: Long, token: String, commentId: Long, commentVote: Int): VoteCommentResult = ehRequest(EhUrl.apiUrl, EhUrl.referer, EhUrl.origin) {
         jsonBody {
             put("method", "votecomment")

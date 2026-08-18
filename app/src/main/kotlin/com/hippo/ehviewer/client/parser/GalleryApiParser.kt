@@ -42,6 +42,10 @@ object GalleryApiParser {
         }
     }
 
+    fun parseSingleTags(body: String, gid: Long): List<String>? = body.parseAs<Result>().items
+        .firstOrNull { it.gid == gid }
+        ?.tags
+
     @Serializable
     data class Result(@SerialName("gmetadata") val items: List<Item>)
 

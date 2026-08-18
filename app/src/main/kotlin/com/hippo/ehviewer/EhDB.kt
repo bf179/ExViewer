@@ -489,12 +489,12 @@ object EhDB {
         fun isEmpty() = required.isEmpty()
     }
 
-    private fun String.bareValue() = removePrefix("_").let { if (':' in it) it.substringAfterLast(':') else it }
+    private fun String.bareValue() = removePrefix("_").let { if (':' in it) substringAfterLast(':') else it }
 
-    private fun BaseGalleryInfo.extractIdentityBare(): IdentityBare {
+    private fun extractIdentityBareFromTags(tags: List<String>): IdentityBare {
         val artists = mutableSetOf<String>()
         val groups = mutableSetOf<String>()
-        simpleTags.orEmpty().forEach { raw ->
+        tags.forEach { raw ->
             val tag = raw.removePrefix("_")
             val sep = tag.indexOf(':')
             if (sep < 0) return@forEach
@@ -508,6 +508,8 @@ object EhDB {
         return IdentityBare(artists, groups)
     }
 
+    private fun BaseGalleryInfo.extractIdentityBare(): IdentityBare = extractIdentityBareFromTags(simpleTags.orEmpty())
+
     private fun List<String>.candidateBareSet() = buildSet {
         this@candidateBareSet.forEach { add(it.bareValue()) }
     }
@@ -518,8 +520,11 @@ object EhDB {
         val matchingUnfavorited: Int get() = totalMatching - matchingFavorited
     }
 
-    suspend fun countHistoryBySameArtistOrGroup(target: BaseGalleryInfo): MatchSummary {
-        val identity = target.extractIdentityBare()
+    private fun computeMatchSummary(target: BaseGalleryInfo, overrideTargetTags: List<String>? = null): MatchSummary {
+        val identity = overrideTargetTags
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { extractIdentityBareFromTags(it) }
+            ?: target.extractIdentityBare()
         if (identity.isEmpty()) return MatchSummary(0, 0)
         val required = identity.required
         var total = 0
@@ -534,12 +539,19 @@ object EhDB {
         return MatchSummary(total, favorited)
     }
 
+    suspend fun countHistoryBySameArtistOrGroup(target: BaseGalleryInfo): MatchSummary = computeMatchSummary(target)
+
+    suspend fun countHistoryBySameArtistOrGroup(target: BaseGalleryInfo, targetTagsOverride: List<String>): MatchSummary = computeMatchSummary(target, targetTagsOverride)
+
     data class RemovalResult(val removed: Int, val totalMatching: Int) {
         val untouchedMatching: Int get() = totalMatching - removed
     }
 
-    suspend fun removeHistoryBySameArtistOrGroup(target: BaseGalleryInfo): RemovalResult {
-        val identity = target.extractIdentityBare()
+    private fun computeRemoval(target: BaseGalleryInfo, overrideTargetTags: List<String>? = null): RemovalResult {
+        val identity = overrideTargetTags
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { extractIdentityBareFromTags(it) }
+            ?: target.extractIdentityBare()
         if (identity.isEmpty()) return RemovalResult(0, 0)
         val required = identity.required
         var totalMatching = 0
@@ -554,6 +566,10 @@ object EhDB {
         toDelete.chunked(500).forEach { db.historyDao().deleteByKeyRange(it) }
         return RemovalResult(removed = toDelete.size, totalMatching = totalMatching)
     }
+
+    suspend fun removeHistoryBySameArtistOrGroup(target: BaseGalleryInfo): RemovalResult = computeRemoval(target)
+
+    suspend fun removeHistoryBySameArtistOrGroup(target: BaseGalleryInfo, targetTagsOverride: List<String>): RemovalResult = computeRemoval(target, targetTagsOverride)
 
     suspend fun getAllFilter() = db.filterDao().list()
 

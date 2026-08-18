@@ -365,8 +365,21 @@ suspend fun doGalleryInfoAction(
 
 context(DialogState, Context, DestinationsNavigator)
 suspend fun removeHistoryBySameArtistOrGroupWithConfirm(info: BaseGalleryInfo) {
-    val summary = runSuspendCatching { withIOContext { EhDB.countHistoryBySameArtistOrGroup(info) } }.getOrNull()
     val activity = findActivity<MainActivity>()
+    val nsTags = runSuspendCatching {
+        withIOContext {
+            EhEngine.getGalleryNamespacedTags(info.gid, info.token).takeIf { it.isNotEmpty() }
+        }
+    }.getOrNull()
+    val summary = runSuspendCatching {
+        withIOContext {
+            if (nsTags != null) {
+                EhDB.countHistoryBySameArtistOrGroup(info, nsTags)
+            } else {
+                EhDB.countHistoryBySameArtistOrGroup(info)
+            }
+        }
+    }.getOrNull()
     if (summary == null) {
         activity.showTip(R.string.remove_history_failed)
         return
@@ -392,7 +405,15 @@ suspend fun removeHistoryBySameArtistOrGroupWithConfirm(info: BaseGalleryInfo) {
             )
         },
     )
-    val result = runSuspendCatching { withIOContext { EhDB.removeHistoryBySameArtistOrGroup(info) } }.getOrNull()
+    val result = runSuspendCatching {
+        withIOContext {
+            if (nsTags != null) {
+                EhDB.removeHistoryBySameArtistOrGroup(info, nsTags)
+            } else {
+                EhDB.removeHistoryBySameArtistOrGroup(info)
+            }
+        }
+    }.getOrNull()
     if (result == null) {
         activity.showTip(R.string.remove_history_failed)
     } else if (result.removed > 0) {
