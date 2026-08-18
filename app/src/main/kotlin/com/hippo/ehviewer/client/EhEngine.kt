@@ -439,7 +439,7 @@ object EhEngine {
                 }
                 put("namespace", 1)
             }
-        }.fetchUsingAsText()
+        }.fetchUsingAsText<String> { this }
         return GalleryApiParser.parseSingleTags(json, gid) ?: emptyList()
     }
 

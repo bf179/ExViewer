@@ -520,7 +520,7 @@ object EhDB {
         val matchingUnfavorited: Int get() = totalMatching - matchingFavorited
     }
 
-    private fun computeMatchSummary(target: BaseGalleryInfo, overrideTargetTags: List<String>? = null): MatchSummary {
+    private suspend fun computeMatchSummary(target: BaseGalleryInfo, overrideTargetTags: List<String>? = null): MatchSummary {
         val identity = overrideTargetTags
             ?.takeIf { it.isNotEmpty() }
             ?.let { extractIdentityBareFromTags(it) }
@@ -547,7 +547,7 @@ object EhDB {
         val untouchedMatching: Int get() = totalMatching - removed
     }
 
-    private fun computeRemoval(target: BaseGalleryInfo, overrideTargetTags: List<String>? = null): RemovalResult {
+    private suspend fun computeRemoval(target: BaseGalleryInfo, overrideTargetTags: List<String>? = null): RemovalResult {
         val identity = overrideTargetTags
             ?.takeIf { it.isNotEmpty() }
             ?.let { extractIdentityBareFromTags(it) }
