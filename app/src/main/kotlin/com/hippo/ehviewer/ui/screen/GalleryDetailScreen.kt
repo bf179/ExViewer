@@ -52,7 +52,6 @@ import com.hippo.ehviewer.dao.DownloadInfo
 import com.hippo.ehviewer.download.DownloadManager
 import com.hippo.ehviewer.ktbuilder.executeIn
 import com.hippo.ehviewer.ktbuilder.imageRequest
-import com.hippo.ehviewer.sendPqApiRequest
 import com.hippo.ehviewer.spider.SpiderDen
 import com.hippo.ehviewer.ui.MainActivity
 import com.hippo.ehviewer.ui.Screen
@@ -246,7 +245,7 @@ fun AnimatedVisibilityScope.GalleryDetailScreen(args: GalleryDetailScreenArgs, n
                                             itype = "gallery",
                                             icontent = icontent,
                                         )
-                                        sendPqApiRequest(pqar, papi)
+                                        EhDB.syncPqApiRequest(pqar, papi)
                                     }
                                 },
                             )

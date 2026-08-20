@@ -99,7 +99,6 @@ import com.hippo.ehviewer.icons.EhIcons
 import com.hippo.ehviewer.icons.filled.Magnet
 import com.hippo.ehviewer.ktbuilder.executeIn
 import com.hippo.ehviewer.ktbuilder.imageRequest
-import com.hippo.ehviewer.sendPqApiRequest
 import com.hippo.ehviewer.ui.GalleryInfoBottomSheet
 import com.hippo.ehviewer.ui.MainActivity
 import com.hippo.ehviewer.ui.confirmRemoveDownload
@@ -796,7 +795,7 @@ fun BelowHeader(galleryDetail: GalleryDetail, voteTag: VoteTag) {
                                     itype = "tag",
                                     icontent = tag,
                                 )
-                                sendPqApiRequest(pqar, papi)
+                                EhDB.syncPqApiRequest(pqar, papi)
                             }
                         }
                         if (galleryDetail.apiUid >= 0) {
