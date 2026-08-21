@@ -81,7 +81,9 @@ import eu.kanade.tachiyomi.util.system.logcat
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import logcat.AndroidLogcatLogger
 import logcat.LogPriority
@@ -149,6 +151,10 @@ class EhApplication :
             StrictMode.enableDefaults()
         }
         AndroidResolverConfigProvider.setContext(this)
+        // Flush pending offline sync requests in background
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            EhDB.flushSyncOutbox()
+        }
     }
 
     private suspend fun cleanupDownload() {

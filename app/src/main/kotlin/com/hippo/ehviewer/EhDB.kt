@@ -36,6 +36,7 @@ import com.hippo.ehviewer.dao.LocalFavoriteInfo
 import com.hippo.ehviewer.dao.ProgressInfo
 import com.hippo.ehviewer.dao.QuickSearch
 import com.hippo.ehviewer.dao.Schema17to18
+import com.hippo.ehviewer.dao.SyncOutbox
 import com.hippo.ehviewer.download.DownloadManager
 import com.hippo.ehviewer.util.sendTo
 import io.ktor.client.call.body
@@ -44,8 +45,11 @@ import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.HttpMethod
 import io.ktor.http.content.TextContent
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -91,7 +95,7 @@ fun showToastOnMainThread(message: String) {
 //     }
 // }
 
-suspend fun sendExlApiRequest(exlapirequest: ExlApiRequest, sapi: String, showSuccessToast: Boolean = true) {
+suspend fun sendExlApiRequest(exlapirequest: ExlApiRequest, sapi: String, showSuccessToast: Boolean = true): Boolean {
     var retryCount = 0
     val maxRetries = 3
     val retryDelay = 5000L // 5秒
@@ -115,21 +119,21 @@ suspend fun sendExlApiRequest(exlapirequest: ExlApiRequest, sapi: String, showSu
                             showToastOnMainThread(message)
                         } ?: showToastOnMainThread("Operation completed successfully")
                     }
-                    return // 成功则直接返回
+                    return true // 成功则直接返回
                 }
 
                 400 -> { // 客户端错误
                     jsonResponse["error"]?.let { error ->
                         showToastOnMainThread("Bad request: $error")
                     } ?: showToastOnMainThread("Invalid request format")
-                    return // 也直接返回
+                    return false // 也直接返回
                 }
 
                 500 -> { // 服务器错误
                     jsonResponse["error"]?.let { error ->
                         showToastOnMainThread("Server error: $error")
                     } ?: showToastOnMainThread("Internal server error")
-                    return // 也直接返回
+                    return false // 也直接返回
                 }
 
                 else -> { // 其他状态码
@@ -137,20 +141,23 @@ suspend fun sendExlApiRequest(exlapirequest: ExlApiRequest, sapi: String, showSu
                     throw RuntimeException("Unexpected status: ${response.status}")
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             retryCount++
             showToastOnMainThread("(${retryCount + 1}/$maxRetries)-${retryDelay / 1000}s Failed to call SAPI: ${e.message}")
             if (retryCount >= maxRetries) {
                 showToastOnMainThread("Failed after $maxRetries attempts: ${e.message}")
-                return
+                return false
             }
             // 延迟后重试
             delay(retryDelay)
         }
     }
+    return false
 }
 
-suspend fun sendPqApiRequest(pqapirequest: PqApiRequest, papi: String) {
+suspend fun sendPqApiRequest(pqapirequest: PqApiRequest, papi: String): Boolean {
     var retryCount = 0
     val maxRetries = 3
     val retryDelay = 5000L // 5秒
@@ -172,21 +179,21 @@ suspend fun sendPqApiRequest(pqapirequest: PqApiRequest, papi: String) {
                     jsonResponse["message"]?.let { message ->
                         showToastOnMainThread(message)
                     } ?: showToastOnMainThread("Operation completed successfully")
-                    return // 成功则直接返回
+                    return true // 成功则直接返回
                 }
 
                 400 -> { // 客户端错误
                     jsonResponse["error"]?.let { error ->
                         showToastOnMainThread("Bad request: $error")
                     } ?: showToastOnMainThread("Invalid request format")
-                    return // 也直接返回
+                    return false // 也直接返回
                 }
 
                 500 -> { // 服务器错误
                     jsonResponse["error"]?.let { error ->
                         showToastOnMainThread("Server error: $error")
                     } ?: showToastOnMainThread("Internal server error")
-                    return // 也直接返回
+                    return false // 也直接返回
                 }
 
                 else -> { // 其他状态码
@@ -194,23 +201,81 @@ suspend fun sendPqApiRequest(pqapirequest: PqApiRequest, papi: String) {
                     throw RuntimeException("Unexpected status: ${response.status}")
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             retryCount++
             showToastOnMainThread("(${retryCount + 1}/$maxRetries)-${retryDelay / 1000}s Failed to call PAPI: ${e.message}")
             if (retryCount >= maxRetries) {
                 showToastOnMainThread("Failed after $maxRetries attempts: ${e.message}")
-                return
+                return false
             }
             // 延迟后重试
             delay(retryDelay)
         }
     }
+    return false
 }
 
 object EhDB {
     private const val DB_NAME = "eh.db"
     private val db = roomDb<EhDatabase>(DB_NAME) {
         addMigrations(Schema17to18())
+    }
+
+    fun syncOutboxDao() = db.syncOutboxDao()
+
+    suspend fun enqueueSyncOutbox(api: String, payload: String) {
+        db.syncOutboxDao().insert(SyncOutbox(api = api, payload = payload, createdAt = System.currentTimeMillis()))
+    }
+
+    suspend fun flushSyncOutbox() {
+        val dao = db.syncOutboxDao()
+        dao.pending().forEach { item ->
+            val success = try {
+                when (item.api) {
+                    "sapi" -> {
+                        val sapi = Settings.sapiUrl
+                        if (sapi.isNullOrBlank()) false else sendExlApiRequest(Json.decodeFromString<ExlApiRequest>(item.payload), sapi, false)
+                    }
+
+                    "papi" -> {
+                        val papi = Settings.papiUrl
+                        if (papi.isNullOrBlank()) false else sendPqApiRequest(Json.decodeFromString<PqApiRequest>(item.payload), papi)
+                    }
+
+                    else -> false
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                false
+            }
+            if (success) {
+                dao.deleteById(item.id)
+            }
+        }
+    }
+
+    suspend fun syncExlApiRequest(req: ExlApiRequest, url: String, showSuccessToast: Boolean = true) {
+        // 整体在 NonCancellable 中执行：flush/send/失败入队都不会被 UI 协程取消打断
+        withContext(NonCancellable) {
+            flushSyncOutbox()
+            val success = sendExlApiRequest(req, url, showSuccessToast)
+            if (!success) {
+                enqueueSyncOutbox("sapi", Json.encodeToString(req))
+            }
+        }
+    }
+
+    suspend fun syncPqApiRequest(req: PqApiRequest, url: String) {
+        withContext(NonCancellable) {
+            flushSyncOutbox()
+            val success = sendPqApiRequest(req, url)
+            if (!success) {
+                enqueueSyncOutbox("papi", Json.encodeToString(req))
+            }
+        }
     }
 
     suspend fun putGalleryInfo(galleryInfo: BaseGalleryInfo) {
@@ -345,7 +410,7 @@ object EhDB {
                     favoriteslot = galleryInfo.favoriteSlot,
                     op = "del",
                 )
-                sendExlApiRequest(exlar, sapi)
+                syncExlApiRequest(exlar, sapi)
             }
         }
     }
@@ -376,7 +441,7 @@ object EhDB {
                     favoriteslot = galleryInfo.favoriteSlot,
                     op = "add",
                 )
-                sendExlApiRequest(exlar, sapi, showSuccessToast)
+                syncExlApiRequest(exlar, sapi, showSuccessToast)
             }
         }
     }
