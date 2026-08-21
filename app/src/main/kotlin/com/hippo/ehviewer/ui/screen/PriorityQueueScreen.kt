@@ -53,7 +53,9 @@ import com.hippo.ehviewer.PqGalleryItem
 import com.hippo.ehviewer.PqGroupItem
 import com.hippo.ehviewer.R
 import com.hippo.ehviewer.Settings
-import com.hippo.ehviewer.collectAsState
+import com.hippo.ehviewer.fetchPqGroupGalleries
+import com.hippo.ehviewer.fetchPqGroups
+import com.hippo.ehviewer.fetchPqSingles
 import com.hippo.ehviewer.ui.DrawerHandle
 import com.hippo.ehviewer.ui.Screen
 import com.hippo.ehviewer.ui.tools.observed
@@ -70,7 +72,7 @@ private const val PQ_PAGE_SIZE = 30
 @Composable
 fun AnimatedVisibilityScope.PriorityQueueScreen(navigator: DestinationsNavigator) = Screen(navigator) {
     val pqUrl by Settings::pqUrl.observed
-    val hideFav by Settings.hideFav.collectAsState()
+    val hideFav by Settings::hideFav.observed
     val scope = rememberCoroutineScope()
     // 捕获当前配置值（委托属性无法智能转换，先取到局部变量）
     val pqUrlValue = pqUrl
@@ -100,7 +102,7 @@ fun AnimatedVisibilityScope.PriorityQueueScreen(navigator: DestinationsNavigator
         singlesLoading = true
         try {
             val page = singlesPage
-            val result = withIOContext { EhDB.fetchPqSingles(baseUrl, page, PQ_PAGE_SIZE, hideFav) }
+            val result = withIOContext { fetchPqSingles(baseUrl, page, PQ_PAGE_SIZE, hideFav) }
             if (result != null) {
                 // hideFav 时除服务端过滤外，再本地双查（本地收藏也视为已收藏）
                 val filtered = if (hideFav) {
@@ -127,7 +129,7 @@ fun AnimatedVisibilityScope.PriorityQueueScreen(navigator: DestinationsNavigator
         groupsLoading = true
         try {
             val page = groupsPage
-            val result = withIOContext { EhDB.fetchPqGroups(baseUrl, page, PQ_PAGE_SIZE, hideFav) }
+            val result = withIOContext { fetchPqGroups(baseUrl, page, PQ_PAGE_SIZE, hideFav) }
             if (result != null) {
                 groups.addAll(result)
                 // 存在未收藏新画廊（new_count>0）的组置前，其余保持服务端顺序
@@ -146,7 +148,7 @@ fun AnimatedVisibilityScope.PriorityQueueScreen(navigator: DestinationsNavigator
         groupLoading = true
         try {
             val page = groupPage
-            val result = withIOContext { EhDB.fetchPqGroupGalleries(baseUrl, group, page, PQ_PAGE_SIZE, hideFav) }
+            val result = withIOContext { fetchPqGroupGalleries(baseUrl, group, page, PQ_PAGE_SIZE, hideFav) }
             if (result != null) {
                 val filtered = if (hideFav) {
                     buildList {
