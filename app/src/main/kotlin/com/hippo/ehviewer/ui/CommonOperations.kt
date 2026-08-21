@@ -82,12 +82,14 @@ import eu.kanade.tachiyomi.util.lang.withIOContext
 import eu.kanade.tachiyomi.util.lang.withUIContext
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
@@ -405,8 +407,10 @@ private suspend fun runBatchFavLoop(items: List<BaseGalleryInfo>, taskId: Long, 
         updateTask(BATCH_STATUS_DONE, successCount)
         showToastOnMainThread("成功收藏 $successCount/$total 个画廊")
     } catch (e: CancellationException) {
-        // 手动终止：保留已处理进度，供下次续跑
-        updateTask(BATCH_STATUS_INTERRUPTED, successCount)
+        // 手动终止：保留已处理进度，供下次续跑（NonCancellable 确保取消后仍能写入 Room）
+        withContext(NonCancellable) {
+            updateTask(BATCH_STATUS_INTERRUPTED, successCount)
+        }
         showToastOnMainThread("任务中止，已处理收藏 $successCount 个画廊")
         throw e
     } catch (e: Exception) {
