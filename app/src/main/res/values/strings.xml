@@ -32,6 +32,7 @@
     <string name="homepage">Homepage</string>
     <string name="subscription">Subscription</string>
     <string name="whats_hot">What\'s hot</string>
+    <string name="priority_queue">优先队列</string>
     <string name="favourite">Favourite</string>
     <string name="history">History</string>
     <string name="downloads">Downloads</string>
