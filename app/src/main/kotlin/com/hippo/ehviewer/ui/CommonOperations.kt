@@ -39,7 +39,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.hippo.ehviewer.EhApplication
 import com.hippo.ehviewer.EhDB
+import com.hippo.ehviewer.ExlApiRequest
 import com.hippo.ehviewer.R
 import com.hippo.ehviewer.Settings
 import com.hippo.ehviewer.client.EhEngine
@@ -49,12 +51,15 @@ import com.hippo.ehviewer.client.data.GalleryInfo
 import com.hippo.ehviewer.client.data.GalleryInfo.Companion.LOCAL_FAVORITED
 import com.hippo.ehviewer.client.data.GalleryInfo.Companion.NOT_FAVORITED
 import com.hippo.ehviewer.client.exception.EhException
+import com.hippo.ehviewer.dao.BatchFavTask
 import com.hippo.ehviewer.dao.DownloadInfo
 import com.hippo.ehviewer.download.DownloadManager
 import com.hippo.ehviewer.download.DownloadService
 import com.hippo.ehviewer.download.downloadDir
 import com.hippo.ehviewer.download.downloadLocation
 import com.hippo.ehviewer.download.tempDownloadDir
+import com.hippo.ehviewer.sendExlApiRequest
+import com.hippo.ehviewer.showToastOnMainThread
 import com.hippo.ehviewer.ui.destinations.ReaderScreenDestination
 import com.hippo.ehviewer.ui.reader.ReaderScreenArgs
 import com.hippo.ehviewer.ui.tools.DialogState
@@ -75,6 +80,12 @@ import com.hippo.files.write
 import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import eu.kanade.tachiyomi.util.lang.withIOContext
 import eu.kanade.tachiyomi.util.lang.withUIContext
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.Clock
@@ -237,6 +248,9 @@ private suspend fun doModifyFavorites(
     note: String = "",
     showSuccessToast: Boolean = true,
 ) = with(galleryInfo) {
+    // 收藏原子化（远端先行）：syncFav 开启且 sapi 已配置时，先向远端 /exl 同步对应操作，
+    // 远端成功（201）后才执行网站变更与本地数据库操作；远端失败则本次操作整体不生效
+    if (!syncRemoteFirst(slot, localFavorited)) return@with false
     val add = when (slot) {
         NOT_FAVORITED -> { // Remove from cloud favorites first
             if (favoriteSlot > LOCAL_FAVORITED) {
@@ -280,10 +294,126 @@ private suspend fun doModifyFavorites(
     add
 }
 
+// 收藏远端先行：开启 syncFav 时先调用 sendExlApiRequest 直接发送（带 token）；
+// 返回 true 表示远端已确认（或无需远端同步），可继续本地/网站变更；false 表示远端失败应整体中止
+private suspend fun BaseGalleryInfo.syncRemoteFirst(slot: Int, localFavorited: Boolean): Boolean {
+    if (!Settings.syncFav) return true
+    val sapi = Settings.sapiUrl
+    if (sapi.isNullOrBlank()) return true
+    val (op, favSlot) = when (slot) {
+        NOT_FAVORITED -> if (favoriteSlot > LOCAL_FAVORITED) "favdel" to -1 else "del" to favoriteSlot
+        LOCAL_FAVORITED -> if (localFavorited) "del" to LOCAL_FAVORITED else "add" to LOCAL_FAVORITED
+        in 0..9 -> slot.toString() to slot
+        else -> return true
+    }
+    val exlar = ExlApiRequest(
+        user = "loliwant",
+        gid = gid,
+        token = token,
+        favoriteslot = favSlot,
+        op = op,
+    )
+    // 直接发送（不带 outbox 入队语义），失败则不继续本地/网站操作
+    return sendExlApiRequest(exlar, sapi, showSuccessToast = false)
+}
+
 suspend fun removeFromFavorites(galleryInfo: BaseGalleryInfo) = doModifyFavorites(
     galleryInfo = galleryInfo,
     localFavorited = EhDB.containLocalFavorites(galleryInfo.gid),
 )
+
+// ===== 批量收藏（app 级后台执行 + Room 进度持久化）=====
+
+// 批量收藏任务状态
+const val BATCH_STATUS_RUNNING = "运行中"
+const val BATCH_STATUS_DONE = "完成"
+const val BATCH_STATUS_FAILED = "失败"
+const val BATCH_STATUS_INTERRUPTED = "中断"
+
+// 全局批量收藏任务句柄：app 级作用域执行，离开页面/点进画廊不中断
+object BatchFavController {
+    @Volatile
+    var job: Job? = null
+}
+
+// 批量收藏逐项处理：仅执行"添加"语义（已收藏判定在调用方完成）
+suspend fun batchModifyFavorite(galleryInfo: BaseGalleryInfo, showSuccessToast: Boolean = false) {
+    val localFavorited = EhDB.containLocalFavorites(galleryInfo.gid)
+    val slot = if (!Settings.hasSignedIn.value) {
+        LOCAL_FAVORITED
+    } else {
+        val defaultFavSlot = Settings.defaultFavSlot
+        // 批量场景不弹"每次询问"对话框，回退到本地收藏
+        if (defaultFavSlot == -2) LOCAL_FAVORITED else defaultFavSlot
+    }
+    doModifyFavorites(galleryInfo, slot, localFavorited, showSuccessToast = showSuccessToast)
+}
+
+// 启动批量收藏任务（app 级作用域，不随 UI 取消）
+fun startBatchFav(items: List<BaseGalleryInfo>) {
+    val job = EhApplication.appScope.launch {
+        val dao = EhDB.batchFavTaskDao()
+        val now = System.currentTimeMillis()
+        val task = BatchFavTask(status = BATCH_STATUS_RUNNING, total = items.size, done = 0, createdAt = now, updatedAt = now)
+        val id = dao.insert(task)
+        runBatchFavLoop(items, id, items.size, task.createdAt)
+    }
+    BatchFavController.job = job
+}
+
+// 续跑已中断的批量任务：重置进度后重新执行（已收藏者跳过并计入成功）
+fun resumeBatchFav(items: List<BaseGalleryInfo>, task: BatchFavTask) {
+    val job = EhApplication.appScope.launch {
+        val dao = EhDB.batchFavTaskDao()
+        dao.update(task.copy(status = BATCH_STATUS_RUNNING, done = 0, updatedAt = System.currentTimeMillis()))
+        runBatchFavLoop(items, task.id, task.total, task.createdAt)
+    }
+    BatchFavController.job = job
+}
+
+// 手动终止：仅取消剩余任务，已处理进度保留（下次可续跑）
+fun cancelBatchFav() {
+    BatchFavController.job?.cancel(CancellationException("手动中止"))
+}
+
+private suspend fun runBatchFavLoop(items: List<BaseGalleryInfo>, taskId: Long, total: Int, createdAt: Long) {
+    val dao = EhDB.batchFavTaskDao()
+    var successCount = 0
+    val defaultFavSlot = Settings.defaultFavSlot
+    val slowfav = defaultFavSlot != -1
+    suspend fun updateTask(status: String, done: Int) {
+        dao.update(BatchFavTask(id = taskId, status = status, total = total, done = done, createdAt = createdAt, updatedAt = System.currentTimeMillis()))
+    }
+    try {
+        items.forEach { galleryInfo ->
+            currentCoroutineContext().ensureActive()
+            // 已收藏判定：实时 favoriteSlot + 本地双查，已收藏跳过并计入成功，避免误删
+            val isFavorited = galleryInfo.favoriteSlot != NOT_FAVORITED || EhDB.containLocalFavorites(galleryInfo.gid)
+            if (!isFavorited) {
+                runSuspendCatching {
+                    batchModifyFavorite(galleryInfo)
+                }.onSuccess { successCount++ }
+                if (slowfav) {
+                    delay(4000)
+                }
+                delay(100) // 每个画廊处理完延迟100毫秒
+            } else {
+                successCount++
+            }
+            updateTask(BATCH_STATUS_RUNNING, successCount)
+        }
+        updateTask(BATCH_STATUS_DONE, successCount)
+        showToastOnMainThread("成功收藏 $successCount/$total 个画廊")
+    } catch (e: CancellationException) {
+        // 手动终止：保留已处理进度，供下次续跑
+        updateTask(BATCH_STATUS_INTERRUPTED, successCount)
+        showToastOnMainThread("任务中止，已处理收藏 $successCount 个画廊")
+        throw e
+    } catch (e: Exception) {
+        updateTask(BATCH_STATUS_FAILED, successCount)
+        showToastOnMainThread("批量收藏失败: ${e.message}")
+    }
+}
 
 fun DestinationsNavigator.navToReader(info: BaseGalleryInfo, page: Int = -1) = navToReader(ReaderScreenArgs.Gallery(info, page))
 
