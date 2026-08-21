@@ -47,7 +47,6 @@ import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.HttpMethod
 import io.ktor.http.content.TextContent
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -56,6 +55,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okio.Path
 import okio.Path.Companion.toOkioPath
 import splitties.arch.room.roomDb
@@ -314,16 +314,13 @@ private suspend fun <T> pqGet(url: String, decode: (String) -> T): T? {
 }
 
 // 单画廊段（section=single），按 updated_at 倒序分页
-suspend fun fetchPqSingles(pqUrl: String, page: Int, pageSize: Int, hideFav: Boolean): List<PqGalleryItem>? =
-    pqGet(buildPqUrl(pqUrl, "single", page, pageSize, hideFav, null)) { body -> parsePqItems<PqGalleryItem>(body) }
+suspend fun fetchPqSingles(pqUrl: String, page: Int, pageSize: Int, hideFav: Boolean): List<PqGalleryItem>? = pqGet(buildPqUrl(pqUrl, "single", page, pageSize, hideFav, null)) { body -> parsePqItems<PqGalleryItem>(body) }
 
 // 标签组列表（section=group），组列表分页
-suspend fun fetchPqGroups(pqUrl: String, page: Int, pageSize: Int, hideFav: Boolean): List<PqGroupItem>? =
-    pqGet(buildPqUrl(pqUrl, "group", page, pageSize, hideFav, null)) { body -> parsePqItems<PqGroupItem>(body) }
+suspend fun fetchPqGroups(pqUrl: String, page: Int, pageSize: Int, hideFav: Boolean): List<PqGroupItem>? = pqGet(buildPqUrl(pqUrl, "group", page, pageSize, hideFav, null)) { body -> parsePqItems<PqGroupItem>(body) }
 
 // 组内画廊（section=group & group=<content>），组内分页
-suspend fun fetchPqGroupGalleries(pqUrl: String, group: String, page: Int, pageSize: Int, hideFav: Boolean): List<PqGalleryItem>? =
-    pqGet(buildPqUrl(pqUrl, "group", page, pageSize, hideFav, group)) { body -> parsePqItems<PqGalleryItem>(body) }
+suspend fun fetchPqGroupGalleries(pqUrl: String, group: String, page: Int, pageSize: Int, hideFav: Boolean): List<PqGalleryItem>? = pqGet(buildPqUrl(pqUrl, "group", page, pageSize, hideFav, group)) { body -> parsePqItems<PqGalleryItem>(body) }
 
 object EhDB {
     private const val DB_NAME = "eh.db"
@@ -332,6 +329,8 @@ object EhDB {
     }
 
     fun syncOutboxDao() = db.syncOutboxDao()
+
+    fun batchFavTaskDao() = db.batchFavTaskDao()
 
     suspend fun enqueueSyncOutbox(api: String, payload: String) {
         db.syncOutboxDao().insert(SyncOutbox(api = api, payload = payload, createdAt = System.currentTimeMillis()))

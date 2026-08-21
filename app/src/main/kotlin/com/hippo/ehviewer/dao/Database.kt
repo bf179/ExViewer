@@ -10,9 +10,9 @@ import com.hippo.ehviewer.client.data.BaseGalleryInfo
     entities = [
         BaseGalleryInfo::class, DownloadLabel::class, DownloadEntity::class, DownloadDirname::class, DownloadArtist::class,
         Filter::class, HistoryInfo::class, LocalFavoriteInfo::class, ProgressInfo::class, QuickSearch::class,
-        GalleryEntityFts::class, SyncOutbox::class,
+        GalleryEntityFts::class, SyncOutbox::class, BatchFavTask::class,
     ],
-    version = 24,
+    version = 25,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 4, to = 5, spec = Schema4to5::class),
@@ -34,6 +34,7 @@ import com.hippo.ehviewer.client.data.BaseGalleryInfo
         AutoMigration(from = 21, to = 22, spec = Schema21to22::class),
         AutoMigration(from = 22, to = 23),
         AutoMigration(from = 23, to = 24),
+        AutoMigration(from = 24, to = 25),
     ],
 )
 @TypeConverters(FilterModeConverter::class)
@@ -49,6 +50,7 @@ abstract class EhDatabase : RoomDatabase() {
     abstract fun progressDao(): ProgressDao
     abstract fun quickSearchDao(): QuickSearchDao
     abstract fun syncOutboxDao(): SyncOutboxDao
+    abstract fun batchFavTaskDao(): BatchFavTaskDao
 }
 
 @Database(
