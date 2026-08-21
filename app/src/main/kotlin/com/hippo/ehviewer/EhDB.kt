@@ -40,6 +40,7 @@ import com.hippo.ehviewer.dao.SyncOutbox
 import com.hippo.ehviewer.download.DownloadManager
 import com.hippo.ehviewer.util.sendTo
 import io.ktor.client.call.body
+import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
@@ -96,6 +97,12 @@ fun showToastOnMainThread(message: String) {
 // }
 
 suspend fun sendExlApiRequest(exlapirequest: ExlApiRequest, sapi: String, showSuccessToast: Boolean = true): Boolean {
+    // API Token 为空时不发送（服务器开启鉴权后会 401），提示后直接失败
+    val apiToken = Settings.apiToken
+    if (apiToken.isNullOrBlank()) {
+        showToastOnMainThread("未配置 API Token，请求已取消")
+        return false
+    }
     var retryCount = 0
     val maxRetries = 3
     val retryDelay = 5000L // 5秒
@@ -104,6 +111,7 @@ suspend fun sendExlApiRequest(exlapirequest: ExlApiRequest, sapi: String, showSu
         try {
             val response = ktorClient.post(sapi) {
                 method = HttpMethod.Post
+                header("Authorization", "Bearer $apiToken")
                 val request = exlapirequest
                 val json = Json.encodeToString(request)
                 setBody(TextContent(text = json, contentType = ContentType.Application.Json))
@@ -158,6 +166,12 @@ suspend fun sendExlApiRequest(exlapirequest: ExlApiRequest, sapi: String, showSu
 }
 
 suspend fun sendPqApiRequest(pqapirequest: PqApiRequest, papi: String): Boolean {
+    // API Token 为空时不发送（服务器开启鉴权后会 401），提示后直接失败
+    val apiToken = Settings.apiToken
+    if (apiToken.isNullOrBlank()) {
+        showToastOnMainThread("未配置 API Token，请求已取消")
+        return false
+    }
     var retryCount = 0
     val maxRetries = 3
     val retryDelay = 5000L // 5秒
@@ -166,6 +180,7 @@ suspend fun sendPqApiRequest(pqapirequest: PqApiRequest, papi: String): Boolean 
         try {
             val response = ktorClient.post(papi) {
                 method = HttpMethod.Post
+                header("Authorization", "Bearer $apiToken")
                 val request = pqapirequest
                 val json = Json.encodeToString(request)
                 setBody(TextContent(text = json, contentType = ContentType.Application.Json))
