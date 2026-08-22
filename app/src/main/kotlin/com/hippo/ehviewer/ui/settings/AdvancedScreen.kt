@@ -146,6 +146,10 @@ fun AnimatedVisibilityScope.AdvancedScreen(navigator: DestinationsNavigator) = S
                 summary = stringResource(id = R.string.settings_hide_fav_in_history_summary),
                 value = Settings::hideFavInHistory,
             )
+            Preference(
+                title = "[Self] 隐藏列表管理",
+                summary = "管理标题/上传者/标签三类隐藏条目",
+            ) { navigator.navigate(com.hippo.ehviewer.ui.destinations.HideListScreenDestination) }
             SwitchPreference(
                 title = "[Self] 显示过滤信息",
                 summary = "显示被过滤的画廊数量",

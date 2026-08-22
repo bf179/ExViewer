@@ -33,6 +33,7 @@ import com.hippo.ehviewer.dao.EhDatabase
 import com.hippo.ehviewer.dao.Filter
 import com.hippo.ehviewer.dao.HistoryInfo
 import com.hippo.ehviewer.dao.LocalFavoriteInfo
+import com.hippo.ehviewer.dao.PqTag
 import com.hippo.ehviewer.dao.ProgressInfo
 import com.hippo.ehviewer.dao.QuickSearch
 import com.hippo.ehviewer.dao.Schema17to18
@@ -563,7 +564,86 @@ object EhDB {
         db.localFavoritesDao().insertOrIgnore(localFavorites)
     }
 
-    suspend fun getAllQuickSearch() = db.quickSearchDao().list()
+    // ===== 快速搜索与隐藏列表（QUICK_SEARCH 同表，HIDE_TYPE 区分）=====
+
+    // 进程内一次性迁移标志：避免重复查库（持久化标志见 Settings.quickSearchHideTypeMigrated）
+    private var quickSearchClassified = false
+
+    // v26 一次性数据分类：艺术家/团队/角色/Coser/临时 → 标签隐藏(3)；MODE=1 → 上传者隐藏(2)；
+    // 引号包裹标题 → 标题隐藏(1) 且 KEYWORD 去引号；其余保持快速搜索(0)。只执行一次。
+    suspend fun ensureQuickSearchClassified() {
+        if (quickSearchClassified || Settings.quickSearchHideTypeMigrated) return
+        val dao = db.quickSearchDao()
+        dao.listAll().forEach { q ->
+            val name = q.name
+            val newHideType = when {
+                name.startsWith("艺术家：") ||
+                    name.startsWith("团队：") ||
+                    name.startsWith("角色：") ||
+                    name.startsWith("Coser：") ||
+                    name.startsWith("临时：") -> 3
+
+                q.mode == 1 -> 2
+
+                name.length > 1 && name.startsWith("\"") && name.endsWith("\"") -> 1
+
+                else -> 0
+            }
+            if (newHideType != 0) {
+                if (newHideType == 1) {
+                    // 引号标题隐藏条目：KEYWORD 去掉两端引号
+                    q.keyword = q.keyword?.trim('"') ?: name.trim('"')
+                }
+                q.hideType = newHideType
+                dao.update(q)
+            }
+        }
+        Settings.quickSearchHideTypeMigrated = true
+        quickSearchClassified = true
+    }
+
+    suspend fun getAllQuickSearch(): List<QuickSearch> {
+        ensureQuickSearchClassified()
+        return db.quickSearchDao().list()
+    }
+
+    // 隐藏列表全部条目（HIDE_TYPE ∈ 1..3）
+    suspend fun getHideList(): List<QuickSearch> {
+        ensureQuickSearchClassified()
+        return db.quickSearchDao().getHideList()
+    }
+
+    // 新增隐藏条目：hideType 1=标题 2=上传者 3=标签，text 为内容
+    suspend fun addHideEntry(text: String, hideType: Int) {
+        ensureQuickSearchClassified()
+        val dao = db.quickSearchDao()
+        val position = dao.getHideList().size
+        val entry = QuickSearch(
+            name = text,
+            hideType = hideType,
+            mode = 0,
+            keyword = text,
+            position = position,
+        )
+        entry.id = dao.insert(entry)
+    }
+
+    suspend fun removeHideEntry(entry: QuickSearch) {
+        val dao = db.quickSearchDao()
+        dao.delete(entry)
+        dao.fill(entry.position)
+    }
+
+    // ===== 优先队列标签缓存（pq_tag）=====
+
+    suspend fun getAllPqTags(): List<String> = db.pqTagDao().getAll()
+
+    // 全量替换优先队列标签缓存（拉取成功后调用）
+    suspend fun replaceAllPqTags(tags: List<String>) {
+        val dao = db.pqTagDao()
+        dao.clear()
+        dao.insertAll(tags.distinct().map { PqTag(it) })
+    }
 
     suspend fun insertQuickSearch(quickSearch: QuickSearch) {
         val dao = db.quickSearchDao()
