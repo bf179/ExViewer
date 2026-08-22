@@ -103,6 +103,19 @@ data class PqPage<T>(
     val items: List<T> = emptyList(),
 )
 
+// 服务器隐藏列表条目（GET /hide_list 返回 [{hide_type, content}]）
+@Serializable
+data class HideListServerItem(
+    val hide_type: Int,
+    val content: String,
+)
+
+// 隐藏列表上传请求信封（POST /hide_list 接收 {items: [...]}）
+@Serializable
+data class HideListUploadRequest(
+    val items: List<HideListServerItem>,
+)
+
 // 保持一个全局的 Toast 引用
 private var currentToast: Toast? = null
 
@@ -633,6 +646,106 @@ object EhDB {
         val dao = db.quickSearchDao()
         dao.delete(entry)
         dao.fill(entry.position)
+    }
+
+    // ===== 隐藏列表同步（GET/POST /hide_list，Bearer 鉴权）=====
+
+    // 拼接 {pqUrl 基址}/hide_list（兼容 /pq_galleries 结尾与裸基址）
+    private fun buildHideListUrl(pqUrl: String): String = buildString {
+        append(if (pqUrl.endsWith("/pq_galleries")) pqUrl.removeSuffix("/pq_galleries") else pqUrl.trimEnd('/'))
+        append("/hide_list")
+    }
+
+    // 拉取服务器隐藏列表（GET /hide_list，Bearer 鉴权；失败返回 null 并 toast 提示）
+    suspend fun fetchHideListFromServer(): List<HideListServerItem>? {
+        val pqUrl = Settings.pqUrl ?: run {
+            showToastOnMainThread("未配置优先队列地址(PQ URL)，无法同步隐藏列表")
+            return null
+        }
+        val apiToken = Settings.apiToken
+        if (apiToken.isNullOrBlank()) {
+            showToastOnMainThread("未配置 API Token，无法同步隐藏列表")
+            return null
+        }
+        return try {
+            val response = ktorClient.get(buildHideListUrl(pqUrl)) {
+                header("Authorization", "Bearer $apiToken")
+            }
+            if (response.status.value in 200..299) {
+                parsePqItems<HideListServerItem>(response.body())
+            } else {
+                showToastOnMainThread("拉取隐藏列表失败: ${response.status}")
+                null
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            showToastOnMainThread("拉取隐藏列表异常: ${e.message}")
+            null
+        }
+    }
+
+    // 服务器条目按 (hideType, content) 去重合并进本地 QUICK_SEARCH 隐藏条目，返回合并后的本地全量
+    suspend fun mergeHideListFromServer(serverItems: List<HideListServerItem>): List<QuickSearch> {
+        ensureQuickSearchClassified()
+        val dao = db.quickSearchDao()
+        val local = dao.getHideList()
+        val localKeys = local.mapTo(HashSet()) { it.hideType to (it.keyword ?: it.name) }
+        var nextPosition = (local.maxOfOrNull { it.position } ?: -1) + 1
+        serverItems.forEach { item ->
+            if ((item.hide_type to item.content) !in localKeys) {
+                val entry = QuickSearch(
+                    name = item.content,
+                    hideType = item.hide_type,
+                    mode = 0,
+                    keyword = item.content,
+                    position = nextPosition++,
+                )
+                entry.id = dao.insert(entry)
+            }
+        }
+        return dao.getHideList()
+    }
+
+    // 上传本地隐藏列表全量（POST /hide_list，Bearer 鉴权；失败返回 false 并 toast 提示）
+    suspend fun uploadHideList(): Boolean {
+        val pqUrl = Settings.pqUrl ?: run {
+            showToastOnMainThread("未配置优先队列地址(PQ URL)，无法上传隐藏列表")
+            return false
+        }
+        val apiToken = Settings.apiToken
+        if (apiToken.isNullOrBlank()) {
+            showToastOnMainThread("未配置 API Token，无法上传隐藏列表")
+            return false
+        }
+        val items = getHideList().map { HideListServerItem(it.hideType, it.keyword ?: it.name) }
+        return try {
+            val body = pqJson.encodeToString(HideListUploadRequest(items))
+            val response = ktorClient.post(buildHideListUrl(pqUrl)) {
+                method = HttpMethod.Post
+                header("Authorization", "Bearer $apiToken")
+                setBody(TextContent(text = body, contentType = ContentType.Application.Json))
+            }
+            if (response.status.value in 200..299) {
+                true
+            } else {
+                showToastOnMainThread("上传隐藏列表失败: ${response.status}")
+                false
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            showToastOnMainThread("上传隐藏列表异常: ${e.message}")
+            false
+        }
+    }
+
+    // 一键同步：先拉取服务器条目按 (hideType, content) 去重合并进本地，再上传本地全量（任一失败返回 false）
+    suspend fun syncHideList(): Boolean {
+        val serverItems = fetchHideListFromServer() ?: return false
+        mergeHideListFromServer(serverItems)
+        EhFilter.refreshHideList()
+        return uploadHideList()
     }
 
     // ===== 优先队列标签缓存（pq_tag）=====
