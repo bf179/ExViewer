@@ -185,6 +185,18 @@ object Settings : DataStorePreferences(null) {
     var apiToken by stringOrNullPref("api_token", null)
     var pqUrl by stringOrNullPref("pq_url", null)
     var addKeyword by stringOrNullPref("add_keyword", null)
+
+    // QUICK_SEARCH HIDE_TYPE 一次性数据分类是否已完成（v26 迁移后首次访问执行）
+    var quickSearchHideTypeMigrated by boolPref("quick_search_hide_type_migrated", false)
+
+    // 隐藏优先队列标签画廊（搜索/热门/排行生效）
+    var hidePqTagged by boolPref("hide_pq_tagged", false)
+
+    // 历史页独立隐藏优先队列标签画廊开关
+    var hidePqTaggedInHistory by boolPref("hide_pq_tagged_in_history", false)
+
+    // 隐藏列表总开关（搜索/主页/热门/排行生效，历史页不生效）
+    var hideListEnabled by boolPref("hide_list_enabled", false)
     var hideFav by boolPref("hide_fav", true)
     var hideFavInHistory by boolPref("hide_fav_in_history", false)
     var debugFilter by boolPref("debug_filter", false)

@@ -130,6 +130,10 @@ class EhApplication :
             }
             EhTagDatabase.launchUpdate()
             launch { EhDB }
+            // v26 一次性 QUICK_SEARCH HIDE_TYPE 数据分类（幂等，仅首次执行）
+            launchIO { EhDB.ensureQuickSearchClassified() }
+            // 后台拉取优先队列标签缓存（失败静默保留旧缓存）
+            launchIO { EhDB.fetchPqTags() }
             launchIO { dataStateFlow.value }
             launchIO { OSUtils.totalMemory }
             launch {

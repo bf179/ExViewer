@@ -146,6 +146,25 @@ fun AnimatedVisibilityScope.AdvancedScreen(navigator: DestinationsNavigator) = S
                 summary = stringResource(id = R.string.settings_hide_fav_in_history_summary),
                 value = Settings::hideFavInHistory,
             )
+            Preference(
+                title = "[Self] 隐藏列表管理",
+                summary = "管理标题/上传者/标签三类隐藏条目",
+            ) { navigator.navigate(com.hippo.ehviewer.ui.destinations.HideListScreenDestination) }
+            SwitchPreference(
+                title = "[Self] 启用隐藏列表",
+                summary = "在搜索/主页/热门/排行中应用隐藏列表（历史页不生效）",
+                value = Settings::hideListEnabled,
+            )
+            SwitchPreference(
+                title = "[Self] 隐藏优先队列标签画廊",
+                summary = "在搜索/热门/排行中隐藏命中优先队列标签的画廊",
+                value = Settings::hidePqTagged,
+            )
+            SwitchPreference(
+                title = "[Self] 历史页隐藏优先队列标签画廊",
+                summary = "历史记录页独立控制（不随 hidePqTagged）",
+                value = Settings::hidePqTaggedInHistory,
+            )
             SwitchPreference(
                 title = "[Self] 显示过滤信息",
                 summary = "显示被过滤的画廊数量",
@@ -477,7 +496,7 @@ fun AnimatedVisibilityScope.AdvancedScreen(navigator: DestinationsNavigator) = S
                     var favTotal = 0
                     var favIndex = 0
                     tailrec suspend fun doBackup() {
-                        val result = EhEngine.getFavorites(favListUrlBuilder.build())
+                        val result = EhEngine.getFavorites(favListUrlBuilder.build(), com.hippo.ehviewer.client.ListSource.FAVORITES)
                         if (result.galleryInfoList.isEmpty()) {
                             launchSnackBar(backupNothing)
                         } else {

@@ -41,6 +41,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
+import androidx.paging.PagingSource
+import androidx.paging.PagingState
 import androidx.paging.cachedIn
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemContentType
@@ -49,6 +51,8 @@ import androidx.paging.map
 import com.hippo.ehviewer.EhDB
 import com.hippo.ehviewer.R
 import com.hippo.ehviewer.Settings
+import com.hippo.ehviewer.client.EhFilter
+import com.hippo.ehviewer.client.data.BaseGalleryInfo
 import com.hippo.ehviewer.collectAsState
 import com.hippo.ehviewer.icons.EhIcons
 import com.hippo.ehviewer.icons.big.History
@@ -87,9 +91,10 @@ fun AnimatedVisibilityScope.HistoryScreen(navigator: DestinationsNavigator) = Sc
 
     val density = LocalDensity.current
     val hideFavInHistory by Settings::hideFavInHistory.observed
-    val historyData = rememberInVM(hideFavInHistory) {
+    val hidePqTaggedInHistory by Settings::hidePqTaggedInHistory.observed
+    val historyData = rememberInVM(hideFavInHistory to hidePqTaggedInHistory) {
         Pager(config = PagingConfig(pageSize = 20, jumpThreshold = 40)) {
-            when {
+            val inner = when {
                 keyword.isNotEmpty() -> if (hideFavInHistory) {
                     EhDB.searchHistoryExcludeFav(keyword)
                 } else {
@@ -99,6 +104,8 @@ fun AnimatedVisibilityScope.HistoryScreen(navigator: DestinationsNavigator) = Sc
                 hideFavInHistory -> EhDB.historyLazyListExcludeFav
                 else -> EhDB.historyLazyList
             }
+            // 历史页独立开关：隐藏命中优先队列标签的画廊
+            if (hidePqTaggedInHistory) PqTagFilteredPagingSource(inner) else inner
         }.flow.map { data ->
             val favCat = Settings.favCat
             data.map {
@@ -216,6 +223,26 @@ fun AnimatedVisibilityScope.HistoryScreen(navigator: DestinationsNavigator) = Sc
                     )
                 }
             }
+        }
+    }
+}
+
+// 历史页 PQ 标签过滤包装：hidePqTaggedInHistory 开启时按缓存集合隐藏命中画廊
+private class PqTagFilteredPagingSource(
+    private val upstream: PagingSource<Int, BaseGalleryInfo>,
+) : PagingSource<Int, BaseGalleryInfo>() {
+    override fun getRefreshKey(state: PagingState<Int, BaseGalleryInfo>): Int? = null
+
+    override suspend fun load(params: LoadParams<Int>): LoadResult<Int, BaseGalleryInfo> {
+        val result = upstream.load(params)
+        return when (result) {
+            is LoadResult.Page -> LoadResult.Page(
+                data = result.data.filter { !EhFilter.hideByPqTag(it) },
+                prevKey = result.prevKey,
+                nextKey = result.nextKey,
+            )
+
+            else -> result
         }
     }
 }

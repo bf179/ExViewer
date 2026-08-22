@@ -13,6 +13,10 @@ data class QuickSearch(
     @ColumnInfo(name = "NAME")
     var name: String,
 
+    // 隐藏类型：0=快速搜索；1=隐藏标题；2=隐藏上传者；3=隐藏标签（v26 新增列）
+    @ColumnInfo(name = "HIDE_TYPE", defaultValue = "0")
+    var hideType: Int = 0,
+
     @ColumnInfo(name = "MODE")
     var mode: Int = 0,
 

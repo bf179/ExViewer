@@ -181,6 +181,8 @@ fun AnimatedVisibilityScope.PriorityQueueScreen(navigator: DestinationsNavigator
         groupPage = 0
         groupEnded = false
         if (pqUrlValue.isNullOrBlank()) return@LaunchedEffect
+        // 刷新优先队列标签缓存（失败静默保留旧缓存）
+        launch { EhDB.fetchPqTags() }
         launch { loadSingles() }
         launch { loadGroups() }
     }
