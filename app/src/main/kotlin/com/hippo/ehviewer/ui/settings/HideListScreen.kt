@@ -101,6 +101,7 @@ fun AnimatedVisibilityScope.HideListScreen(navigator: DestinationsNavigator) = S
                     val text = state.text.toString().trim()
                     launch {
                         EhDB.addHideEntry(text, hideType)
+                        com.hippo.ehviewer.client.EhFilter.refreshHideList()
                         hideEntries.addAll(EhDB.getHideList().filter { entry -> hideEntries.none { it.id == entry.id } })
                     }
                     cont.resume(Unit)
@@ -233,6 +234,7 @@ fun AnimatedVisibilityScope.HideListScreen(navigator: DestinationsNavigator) = S
                                             Text(text = "删除隐藏条目 \"${entry.name}\"?")
                                         }
                                         EhDB.removeHideEntry(entry)
+                                        com.hippo.ehviewer.client.EhFilter.refreshHideList()
                                         hideEntries.remove(entry)
                                     }
                                 },

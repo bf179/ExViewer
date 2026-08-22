@@ -6,6 +6,7 @@ import com.hippo.ehviewer.Settings
 import com.hippo.ehviewer.client.data.GalleryInfo
 import com.hippo.ehviewer.dao.Filter
 import com.hippo.ehviewer.dao.FilterMode
+import com.hippo.ehviewer.dao.QuickSearch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -147,5 +148,47 @@ object EhFilter : CoroutineScope {
             // 最终结果：必须同时满足上传者、标题、黑名单标签的条件
             isUploaderMatched && isTitleMatched && isBlacklistTagMatched
         }
+    }
+
+    // ===== 隐藏列表与优先队列标签隐藏（OR 语义，任一命中即隐藏）=====
+
+    // 隐藏列表缓存（QUICK_SEARCH HIDE_TYPE∈1..3），增删后需 refreshHideList 失效
+    @Volatile
+    private var hideListCache: List<QuickSearch>? = null
+    private suspend fun getHideListCache(): List<QuickSearch> = hideListCache ?: EhDB.getHideList().also { hideListCache = it }
+
+    fun refreshHideList() {
+        hideListCache = null
+    }
+
+    // 优先队列标签缓存（pq_tag 表），拉取成功后 refreshPqTags 失效重建
+    @Volatile
+    private var pqTagCache: Set<String>? = null
+    private suspend fun getPqTagCache(): Set<String> = pqTagCache ?: EhDB.getAllPqTags().toSet().also { pqTagCache = it }
+
+    fun refreshPqTags() {
+        pqTagCache = null
+    }
+
+    // 隐藏列表判定：hideListEnabled 开启时遍历隐藏列表（1=标题 contains；2=上传者 equals；3=标签 matchTag）
+    suspend fun hideByList(info: GalleryInfo): Boolean {
+        if (!Settings.hideListEnabled) return false
+        val list = getHideListCache()
+        if (list.isEmpty()) return false
+        return list.any { entry ->
+            when (entry.hideType) {
+                1 -> info.title.orEmpty().contains(entry.keyword ?: entry.name, true)
+                2 -> (entry.keyword ?: entry.name) == info.uploader
+                3 -> info.simpleTags?.any { tag -> matchTag(tag.lowercase(), (entry.keyword ?: entry.name).lowercase()) } == true
+                else -> false
+            }
+        }
+    }
+
+    // 优先队列标签判定：画廊任一 simpleTags 命中缓存 pq_tag 集合（matchTag 命名空间感知）
+    suspend fun hideByPqTag(info: GalleryInfo): Boolean {
+        val tags = getPqTagCache()
+        if (tags.isEmpty()) return false
+        return info.simpleTags?.any { tag -> tags.any { matchTag(tag.lowercase(), it.lowercase()) } } == true
     }
 }

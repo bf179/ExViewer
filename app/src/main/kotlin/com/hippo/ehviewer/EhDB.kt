@@ -23,6 +23,7 @@ import arrow.fx.coroutines.resource
 import arrow.fx.coroutines.resourceScope
 import com.hippo.ehviewer.EhApplication.Companion.ktorClient
 import com.hippo.ehviewer.Settings
+import com.hippo.ehviewer.client.EhFilter
 import com.hippo.ehviewer.client.data.BaseGalleryInfo
 import com.hippo.ehviewer.client.data.GalleryInfo.Companion.NOT_FAVORITED
 import com.hippo.ehviewer.dao.DownloadArtist
@@ -643,6 +644,31 @@ object EhDB {
         val dao = db.pqTagDao()
         dao.clear()
         dao.insertAll(tags.distinct().map { PqTag(it) })
+    }
+
+    // 拉取优先队列标签（GET {pqUrl base}/pq_tags，Bearer 鉴权；失败静默保留旧缓存）
+    suspend fun fetchPqTags() {
+        val pqUrl = Settings.pqUrl ?: return
+        val apiToken = Settings.apiToken
+        if (apiToken.isNullOrBlank()) return
+        val tagsUrl = buildString {
+            append(if (pqUrl.endsWith("/pq_galleries")) pqUrl.removeSuffix("/pq_galleries") else pqUrl.trimEnd('/'))
+            append("/pq_tags")
+        }
+        try {
+            val response = ktorClient.get(tagsUrl) {
+                header("Authorization", "Bearer $apiToken")
+            }
+            if (response.status.value in 200..299) {
+                val tags = pqJson.decodeFromString<List<String>>(response.body())
+                replaceAllPqTags(tags)
+                EhFilter.refreshPqTags()
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // 静默失败，保留旧缓存
+        }
     }
 
     suspend fun insertQuickSearch(quickSearch: QuickSearch) {

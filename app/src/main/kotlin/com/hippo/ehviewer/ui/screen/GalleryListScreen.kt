@@ -108,6 +108,7 @@ import com.hippo.ehviewer.client.EhEngine
 import com.hippo.ehviewer.client.EhFilter.remember
 import com.hippo.ehviewer.client.EhTagDatabase
 import com.hippo.ehviewer.client.EhUtils
+import com.hippo.ehviewer.client.ListSource
 import com.hippo.ehviewer.client.data.BaseGalleryInfo
 import com.hippo.ehviewer.client.data.GalleryInfo.Companion.NOT_FAVORITED
 import com.hippo.ehviewer.client.data.ListUrlBuilder
@@ -238,6 +239,13 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                 val slowload = Settings.hideFav
                 override fun getRefreshKey(state: PagingState<String, BaseGalleryInfo>): String? = null
                 override suspend fun load(params: LoadParams<String>) = withIOContext {
+                    // 列表来源：决定隐藏开关生效范围（TOPLIST/HOT/首页/其余按搜索处理）
+                    val source = when {
+                        urlBuilder.mode == MODE_TOPLIST -> ListSource.TOPLIST
+                        urlBuilder.mode == MODE_WHATS_HOT -> ListSource.HOT
+                        urlBuilder.mode == MODE_NORMAL && urlBuilder.keyword.isNullOrBlank() -> ListSource.HOME
+                        else -> ListSource.SEARCH
+                    }
                     if (urlBuilder.mode == MODE_TOPLIST) {
                         // TODO: Since we know total pages, let pager support jump
                         val key = (params.key ?: urlBuilder.jumpTo)?.toInt() ?: 0
@@ -245,7 +253,7 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                         val next = (key + 1).takeIf { it < TOPLIST_PAGES }
                         runSuspendCatching {
                             urlBuilder.setJumpTo(key)
-                            EhEngine.getGalleryList(urlBuilder.build())
+                            EhEngine.getGalleryList(urlBuilder.build(), source)
                         }.foldToLoadResult { result ->
                             LoadResult.Page(result.galleryInfoList, prev?.toString(), next?.toString())
                         }
@@ -278,7 +286,7 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                         }
                         runSuspendCatching {
                             val url = urlBuilder.build()
-                            EhEngine.getGalleryList(url)
+                            EhEngine.getGalleryList(url, source)
                         }.foldToLoadResult { result ->
                             urlBuilder.jumpTo = null
                             LoadResult.Page(result.galleryInfoList, result.prev, result.next)

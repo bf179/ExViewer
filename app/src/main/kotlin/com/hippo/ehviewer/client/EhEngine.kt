@@ -174,6 +174,9 @@ suspend inline fun <T> HttpStatement.fetchUsingAsByteBuffer(crossinline block: s
     }
 }
 
+// 列表来源上下文：决定隐藏开关在 fillInfo 过滤链路中的生效范围
+enum class ListSource { SEARCH, HOME, HOT, TOPLIST, FAVORITES, HISTORY, OTHER }
+
 object EhEngine {
     suspend fun getOriginalImageUrl(url: String, referer: String?) = noRedirectEhRequest(url, referer).executeSafely { response ->
         val location = response.headers["Location"] ?: throw InsufficientFundsException()
@@ -231,9 +234,9 @@ object EhEngine {
         return ehRequest(url, referer).fetchUsingAsText(GalleryPageParser::parse)
     }
 
-    suspend fun getGalleryList(url: String) = ehRequest(url, EhUrl.referer).fetchUsingAsByteBuffer(GalleryListParser::parse)
+    suspend fun getGalleryList(url: String, source: ListSource = ListSource.OTHER) = ehRequest(url, EhUrl.referer).fetchUsingAsByteBuffer(GalleryListParser::parse)
         .takeIf { it.galleryInfoList.isNotEmpty() }
-        ?.apply { galleryInfoList.fillInfo(url, true) }
+        ?.apply { galleryInfoList.fillInfo(url, source, true) }
         ?: GalleryListParser.emptyResult
 
     suspend fun getGalleryDetail(url: String) = ehRequest(url, EhUrl.referer).fetchUsingAsText {
@@ -249,8 +252,8 @@ object EhEngine {
         GalleryDetailParser.parsePreviewList(this)
     }
 
-    suspend fun getFavorites(url: String) = ehRequest(url, EhUrl.referer).fetchUsingAsByteBuffer(FavoritesParser::parse)
-        .apply { galleryInfoList.fillInfo(url) }
+    suspend fun getFavorites(url: String, source: ListSource = ListSource.FAVORITES) = ehRequest(url, EhUrl.referer).fetchUsingAsByteBuffer(FavoritesParser::parse)
+        .apply { galleryInfoList.fillInfo(url, source) }
 
     suspend fun signIn(username: String, password: String): String {
         val referer = "https://forums.e-hentai.org/index.php?act=Login&CODE=00"
@@ -377,7 +380,7 @@ object EhEngine {
                 append("ddact", catStr)
                 gidArray.forEach { append("modifygids[]", it.toString()) }
             }
-        }.fetchUsingAsByteBuffer(FavoritesParser::parse).apply { galleryInfoList.fillInfo(url) }
+        }.fetchUsingAsByteBuffer(FavoritesParser::parse).apply { galleryInfoList.fillInfo(url, ListSource.FAVORITES) }
     }
 
     suspend fun getGalleryPageApi(gid: Long, index: Int, pToken: String, showKey: String?, previousPToken: String?): GalleryPageParser.Result {
@@ -479,7 +482,7 @@ object EhEngine {
         }
     }.fetchUsingAsText(GalleryTokenApiParser::parse)
 
-    private suspend fun MutableList<BaseGalleryInfo>.fillInfo(url: String, filter: Boolean = false) = with(EhFilter) {
+    private suspend fun MutableList<BaseGalleryInfo>.fillInfo(url: String, source: ListSource = ListSource.OTHER, filter: Boolean = false) = with(EhFilter) {
         val enablefilter = !Settings.disableFilter
         // 初始化 debug 计数
         var otherFilterCount = 0
@@ -491,6 +494,14 @@ object EhEngine {
         val hasRated = any { it.rated }
         val needApi = filter && needTags() && !hasTags || Settings.showGalleryPages.value && !hasPages || hasRated
         if (needApi) fillGalleryListByApi(this@fillInfo, url)
+        // 隐藏判定（与本地过滤并列；按来源应用对应开关）
+        if (isNotEmpty()) {
+            removeAllSuspend {
+                (Settings.hidePqTagged && (source == ListSource.SEARCH || source == ListSource.HOT || source == ListSource.TOPLIST) && hideByPqTag(it)) ||
+                    (Settings.hidePqTaggedInHistory && source == ListSource.HISTORY && hideByPqTag(it)) ||
+                    (Settings.hideListEnabled && (source == ListSource.SEARCH || source == ListSource.HOME || source == ListSource.HOT || source == ListSource.TOPLIST) && hideByList(it))
+            }
+        }
         if (enablefilter && filter) removeAllSuspend { filterUploader(it) || filterTag(it) || filterTagNamespace(it) }
         forEach {
             if (it.favoriteSlot == GalleryInfo.NOT_FAVORITED && EhDB.containLocalFavorites(it.gid)) {

@@ -160,7 +160,7 @@ fun AnimatedVisibilityScope.FavouritesScreen(navigator: DestinationsNavigator) =
                             }
                         }
                         runSuspendCatching {
-                            EhEngine.getFavorites(urlBuilder.build())
+                            EhEngine.getFavorites(urlBuilder.build(), com.hippo.ehviewer.client.ListSource.FAVORITES)
                         }.foldToLoadResult { result ->
                             Settings.favCat = result.catArray.toTypedArray()
                             Settings.favCount = result.countArray.toIntArray()
