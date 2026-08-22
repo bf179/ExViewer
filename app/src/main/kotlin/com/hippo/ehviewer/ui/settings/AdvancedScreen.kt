@@ -146,25 +146,11 @@ fun AnimatedVisibilityScope.AdvancedScreen(navigator: DestinationsNavigator) = S
                 summary = stringResource(id = R.string.settings_hide_fav_in_history_summary),
                 value = Settings::hideFavInHistory,
             )
+            // 二级页入口：收藏同步、隐藏列表与优先队列配置已迁移至"同步与隐藏过滤"
             Preference(
-                title = "[Self] 隐藏列表管理",
-                summary = "管理标题/上传者/标签三类隐藏条目",
-            ) { navigator.navigate(com.hippo.ehviewer.ui.destinations.HideListScreenDestination) }
-            SwitchPreference(
-                title = "[Self] 启用隐藏列表",
-                summary = "在搜索/主页/热门/排行中应用隐藏列表（历史页不生效）",
-                value = Settings::hideListEnabled,
-            )
-            SwitchPreference(
-                title = "[Self] 隐藏优先队列标签画廊",
-                summary = "在搜索/热门/排行中隐藏命中优先队列标签的画廊",
-                value = Settings::hidePqTagged,
-            )
-            SwitchPreference(
-                title = "[Self] 历史页隐藏优先队列标签画廊",
-                summary = "历史记录页独立控制（不随 hidePqTagged）",
-                value = Settings::hidePqTaggedInHistory,
-            )
+                title = "[Self] 同步与隐藏过滤",
+                summary = "收藏同步、隐藏列表与优先队列配置",
+            ) { navigator.navigate(com.hippo.ehviewer.ui.destinations.SyncAndHideScreenDestination) }
             SwitchPreference(
                 title = "[Self] 显示过滤信息",
                 summary = "显示被过滤的画廊数量",
@@ -237,74 +223,6 @@ fun AnimatedVisibilityScope.AdvancedScreen(navigator: DestinationsNavigator) = S
                 useSelectedAsSummary = true,
                 entries = languages,
             )
-            SwitchPreference(
-                title = "[Self] 同步收藏变动到云端",
-                summary = "仅在sapi不为空时有效",
-                value = Settings::syncFav,
-            )
-            var showSapi by Settings::syncFav.observed
-            var sapiUrl by Settings::sapiUrl.observed
-            AnimatedVisibility(visible = showSapi) {
-                Preference(
-                    title = "SAPI",
-                    summary = sapiUrl ?: "Not set",
-                ) {
-                    coroutineScope.launch {
-                        val newSapiUrl = awaitInputText(
-                            initial = sapiUrl ?: "",
-                            title = "Set SAPI Endpoint",
-                            hint = "https://api.example.com/exlocal",
-                        )
-                        // 空字符串转为 null 存储
-                        sapiUrl = newSapiUrl.ifBlank { null }
-                    }
-                }
-            }
-            var papiUrl by Settings::papiUrl.observed
-            Preference(
-                title = "PAPI",
-                summary = papiUrl ?: "Not set",
-            ) {
-                coroutineScope.launch {
-                    val newPapiUrl = awaitInputText(
-                        initial = papiUrl ?: "",
-                        title = "Set PAPI Endpoint",
-                        hint = "https://api.example.com/pq",
-                    )
-                    // 空字符串转为 null 存储
-                    papiUrl = newPapiUrl.ifBlank { null }
-                }
-            }
-            var pqUrl by Settings::pqUrl.observed
-            Preference(
-                title = "优先队列地址 (PQ URL)",
-                summary = pqUrl ?: "Not set",
-            ) {
-                coroutineScope.launch {
-                    val newPqUrl = awaitInputText(
-                        initial = pqUrl ?: "",
-                        title = "Set PQ Endpoint",
-                        hint = "https://api.example.com/pq_galleries",
-                    )
-                    // 空字符串转为 null 存储
-                    pqUrl = newPqUrl.ifBlank { null }
-                }
-            }
-            var apiToken by Settings::apiToken.observed
-            Preference(
-                title = "API Token",
-                summary = apiToken?.let { "已配置 (${it.take(4)}…)" } ?: "Not set",
-            ) {
-                coroutineScope.launch {
-                    val newApiToken = awaitInputText(
-                        initial = apiToken ?: "",
-                        title = "Set API Token",
-                        hint = "与服务器 server.api_token 保持一致",
-                    )
-                    // 空字符串转为 null 存储
-                    apiToken = newApiToken.ifBlank { null }
-                }
-            }
             var addKeyword by Settings::addKeyword.observed
             Preference(
                 title = "AddKeyword",
