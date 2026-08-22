@@ -47,17 +47,20 @@ import androidx.compose.material.icons.outlined.GroupWork
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.fork.SwipeToDismissBox
 import androidx.compose.material3.fork.SwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -79,6 +82,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.viewModelScope
@@ -117,16 +121,21 @@ import com.hippo.ehviewer.client.data.ListUrlBuilder.Companion.MODE_WHATS_HOT
 import com.hippo.ehviewer.client.parser.GalleryDetailUrlParser
 import com.hippo.ehviewer.client.parser.GalleryPageUrlParser
 import com.hippo.ehviewer.collectAsState
+import com.hippo.ehviewer.dao.BatchFavTask
 import com.hippo.ehviewer.dao.Filter
 import com.hippo.ehviewer.dao.FilterMode
 import com.hippo.ehviewer.dao.QuickSearch
 import com.hippo.ehviewer.icons.EhIcons
 import com.hippo.ehviewer.icons.filled.GoTo
 import com.hippo.ehviewer.sendExlApiRequest
+import com.hippo.ehviewer.ui.BATCH_STATUS_INTERRUPTED
+import com.hippo.ehviewer.ui.BATCH_STATUS_RUNNING
+import com.hippo.ehviewer.ui.BatchFavController
 import com.hippo.ehviewer.ui.DrawerHandle
 import com.hippo.ehviewer.ui.LocalSideSheetState
 import com.hippo.ehviewer.ui.Screen
 import com.hippo.ehviewer.ui.awaitSelectDate
+import com.hippo.ehviewer.ui.cancelBatchFav
 import com.hippo.ehviewer.ui.destinations.ProgressScreenDestination
 import com.hippo.ehviewer.ui.doGalleryInfoAction
 import com.hippo.ehviewer.ui.main.AdvancedSearchOption
@@ -138,6 +147,8 @@ import com.hippo.ehviewer.ui.main.GalleryInfoListItem
 import com.hippo.ehviewer.ui.main.GalleryList
 import com.hippo.ehviewer.ui.main.SearchFilter
 import com.hippo.ehviewer.ui.modifyFavorites
+import com.hippo.ehviewer.ui.resumeBatchFav
+import com.hippo.ehviewer.ui.startBatchFav
 import com.hippo.ehviewer.ui.tools.Await
 import com.hippo.ehviewer.ui.tools.DialogState
 import com.hippo.ehviewer.ui.tools.FastScrollLazyColumn
@@ -156,14 +167,11 @@ import com.ramcosta.composedestinations.spec.Direction
 import eu.kanade.tachiyomi.util.lang.launchIO
 import eu.kanade.tachiyomi.util.lang.withIOContext
 import eu.kanade.tachiyomi.util.lang.withUIContext
-import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.roundToInt
 import kotlin.random.Random
 import kotlin.text.toLong
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import moe.tarsin.coroutines.onEachLatest
@@ -284,6 +292,17 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
     FavouriteStatusRouter.Observe(data)
     val listMode by Settings.listMode.collectAsState()
 
+    // 批量收藏任务进度观察（Room 持久化，进入页面可检测未完成任务并恢复/重续）
+    val batchTaskFlow = rememberInVM { EhDB.batchFavTaskDao().observeLatest() }
+    val batchTask by batchTaskFlow.collectAsState(null)
+    LaunchedEffect(Unit) {
+        // 已完成/失败的历史任务清理（未完成的保留以支持续跑）
+        val latest = EhDB.batchFavTaskDao().getLatest()
+        if (latest != null && latest.status !in setOf(BATCH_STATUS_RUNNING, BATCH_STATUS_INTERRUPTED)) {
+            EhDB.batchFavTaskDao().deleteById(latest.id)
+        }
+    }
+
     val entries = stringArrayResource(id = R.array.toplist_entries)
     val values = stringArrayResource(id = R.array.toplist_values)
     val toplists = remember { entries zip values }
@@ -331,65 +350,27 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                 colors = topBarOnDrawerColor(),
                 actions = {
                     val nameEmpty = stringResource(R.string.name_is_empty)
-                    // FilterAlt添加按钮
+                    // FilterAlt 添加按钮：直接读取搜索框内容智能识别（复合 > 标题 > 命名空间 > 裸文本标题）
                     IconButton(
                         onClick = {
                             launch {
                                 if (urlBuilder.mode == MODE_IMAGE_SEARCH) {
                                     showSnackbar("图片不能被添加到过滤器")
                                 } else {
-                                    val input = awaitInputText(
-                                        initial = urlBuilder.keyword.orEmpty(),
-                                        title = "添加过滤器",
-                                        hint = "添加搜索框中内容到过滤器",
-                                    ) { rawInput ->
-                                        var ptext = rawInput.trim()
-                                        ensure(ptext.isNotBlank()) { nameEmpty }
-                                        ptext
-                                    } ?: return@launch // 取消输入时直接返回
-                                    val ftext = input.trim()
-                                    if (ftext.isBlank()) {
-                                        showSnackbar("输入为空")
+                                    // 直接读取搜索框当前内容，不弹输入框
+                                    val rawInput = searchFieldState.text.toString().trim()
+                                    if (rawInput.isEmpty()) {
+                                        showSnackbar("搜索框为空，无法添加过滤器")
                                         return@launch
                                     }
-                                    if (ftext.isNotBlank()) {
-                                        val (processedText, filterMode, modeDisplayName) = if (!('$' in ftext) && (ftext.startsWith('"') && ftext.endsWith('"'))) {
-                                            // 单标题模式
-                                            val processed = ftext.removeSurrounding("\"")
-                                            Triple(processed, FilterMode.TITLE, "标题")
-                                        } else {
-                                            // 复合标签模式
-                                            val processed = ftext.removeSuffix("$")
-                                                .replace("$ ", ",")
-                                                .replace("\" ", "\",")
-                                                .replace("p:", "parody:")
-                                                .replace("f:", "female:")
-                                                .replace("m:", "male:")
-                                                .replace("a:", "artist:")
-                                                .replace("x:", "mixed:")
-                                                .replace("o:", "other:")
-                                                .replace("l:", "language:")
-                                                .replace("g:", "group:")
-                                                .replace("c:", "character:")
-                                                .replace("cos:", "cosplayer:")
-                                            if (',' in processed) {
-                                                Triple(processed, FilterMode.TAG_GROUP, "复合标签")
-                                            } else {
-                                                if ("uploader:" in processed) {
-                                                    Triple(processed, FilterMode.UPLOADER, "上传者")
-                                                } else {
-                                                    Triple(processed, FilterMode.TAG, "单标签")
-                                                }
-                                            }
-                                        }
-                                        awaitConfirmationOrCancel {
-                                            Text(text = "屏蔽 \"$processedText\" ($modeDisplayName)?")
-                                        }
-                                        withContext(Dispatchers.IO) {
-                                            Filter(filterMode, processedText).remember()
-                                        }
-                                        showSnackbar("过滤项已添加")
+                                    val (processedText, filterMode, modeDisplayName) = recognizeFilterInput(rawInput)
+                                    awaitConfirmationOrCancel {
+                                        Text(text = "屏蔽 \"$processedText\" ($modeDisplayName)?")
                                     }
+                                    withContext(Dispatchers.IO) {
+                                        Filter(filterMode, processedText).remember()
+                                    }
+                                    showSnackbar("过滤项已添加")
                                 }
                             }
                         },
@@ -695,144 +676,160 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
             }
         }
         val organizeMode by Settings.organizeMode.collectAsState()
-        GalleryList(
-            data = data,
-            contentModifier = Modifier.nestedScroll(searchBarConnection),
-            contentPadding = contentPadding,
-            listMode = listMode,
-            organizeMode = organizeMode,
-            detailListState = listState,
-            detailItemContent = { info ->
-                GalleryInfoListItem(
-                    onClick = { navigate(info.asDst()) },
+        Box(modifier = Modifier.fillMaxSize()) {
+            GalleryList(
+                data = data,
+                contentModifier = Modifier.nestedScroll(searchBarConnection),
+                contentPadding = contentPadding,
+                listMode = listMode,
+                organizeMode = organizeMode,
+                detailListState = listState,
+                detailItemContent = { info ->
+                    GalleryInfoListItem(
+                        onClick = { navigate(info.asDst()) },
 //                    onLongClick = { launch { doGalleryInfoAction(info) } },
-                    onLongClick = {
-                        launch {
-                            val quickfav = Settings.quickFav
-                            if (quickfav) {
-                                val favorited = info.favoriteSlot != NOT_FAVORITED
-                                if (!favorited) {
-                                    runSuspendCatching {
-                                        modifyFavorites(info)
-                                        showTip(R.string.add_to_favorite_success)
-                                    }.onFailure {
-                                        showTip(R.string.add_to_favorite_failure)
+                        onLongClick = {
+                            launch {
+                                val quickfav = Settings.quickFav
+                                if (quickfav) {
+                                    val favorited = info.favoriteSlot != NOT_FAVORITED
+                                    if (!favorited) {
+                                        runSuspendCatching {
+                                            modifyFavorites(info)
+                                            showTip(R.string.add_to_favorite_success)
+                                        }.onFailure {
+                                            showTip(R.string.add_to_favorite_failure)
+                                        }
+                                    } else {
+                                        doGalleryInfoAction(info)
                                     }
                                 } else {
                                     doGalleryInfoAction(info)
                                 }
-                            } else {
-                                doGalleryInfoAction(info)
                             }
-                        }
-                    },
-                    info = info,
-                    showPages = showPages,
-                    modifier = Modifier.height(height),
-                )
-            },
-            thumbListState = gridState,
-            thumbItemContent = { info ->
-                GalleryInfoGridItem(
-                    onClick = { navigate(info.asDst()) },
+                        },
+                        info = info,
+                        showPages = showPages,
+                        modifier = Modifier.height(height),
+                    )
+                },
+                thumbListState = gridState,
+                thumbItemContent = { info ->
+                    GalleryInfoGridItem(
+                        onClick = { navigate(info.asDst()) },
 //                    onLongClick = { launch { doGalleryInfoAction(info) } },
-                    onLongClick = {
-                        launch {
-                            val quickfav = Settings.quickFav
-                            if (quickfav) {
-                                val favorited = info.favoriteSlot != NOT_FAVORITED
-                                if (!favorited) {
-                                    runSuspendCatching {
-                                        modifyFavorites(info)
-                                        showTip(R.string.add_to_favorite_success)
-                                    }.onFailure {
-                                        showTip(R.string.add_to_favorite_failure)
+                        onLongClick = {
+                            launch {
+                                val quickfav = Settings.quickFav
+                                if (quickfav) {
+                                    val favorited = info.favoriteSlot != NOT_FAVORITED
+                                    if (!favorited) {
+                                        runSuspendCatching {
+                                            modifyFavorites(info)
+                                            showTip(R.string.add_to_favorite_success)
+                                        }.onFailure {
+                                            showTip(R.string.add_to_favorite_failure)
+                                        }
+                                    } else {
+                                        doGalleryInfoAction(info)
                                     }
                                 } else {
                                     doGalleryInfoAction(info)
                                 }
-                            } else {
-                                doGalleryInfoAction(info)
                             }
+                        },
+                        info = info,
+                        showPages = showPages,
+                    )
+                },
+                groupHeaderContent = { group ->
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                        shape = RoundedCornerShape(8.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Folder,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = group.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            Text(
+                                text = stringResource(R.string.group_count, group.items.size),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
-                    },
-                    info = info,
-                    showPages = showPages,
-                )
-            },
-            groupHeaderContent = { group ->
-                Surface(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainer,
-                    shape = RoundedCornerShape(8.dp),
-                ) {
+                    }
+                },
+                groupDividerContent = { _ ->
                     Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp, horizontal = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Folder,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.primary,
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(1.dp)
+                                .clip(RoundedCornerShape(0.5.dp))
+                                .background(MaterialTheme.colorScheme.outlineVariant),
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = group.name,
-                            style = MaterialTheme.typography.titleMedium,
+                            text = stringResource(R.string.group_uncategorized),
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
-                        )
-                        Spacer(modifier = Modifier.weight(1f))
-                        Text(
-                            text = stringResource(R.string.group_count, group.items.size),
-                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(1.dp)
+                                .clip(RoundedCornerShape(0.5.dp))
+                                .background(MaterialTheme.colorScheme.outlineVariant),
+                        )
                     }
-                }
-            },
-            groupDividerContent = { _ ->
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp, horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(1.dp)
-                            .clip(RoundedCornerShape(0.5.dp))
-                            .background(MaterialTheme.colorScheme.outlineVariant),
-                    )
-                    Text(
-                        text = stringResource(R.string.group_uncategorized),
-                        modifier = Modifier.padding(horizontal = 12.dp),
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(1.dp)
-                            .clip(RoundedCornerShape(0.5.dp))
-                            .background(MaterialTheme.colorScheme.outlineVariant),
-                    )
-                }
-            },
-            searchBarOffsetY = { searchBarOffsetY },
-            onRefresh = {
-                urlBuilder.setRange(0)
-                data.refresh()
-            },
-            onLoading = { searchBarOffsetY = 0 },
-        )
+                },
+                searchBarOffsetY = { searchBarOffsetY },
+                onRefresh = {
+                    urlBuilder.setRange(0)
+                    data.refresh()
+                },
+                onLoading = { searchBarOffsetY = 0 },
+            )
+            // 批量收藏进行中/可续跑的进度横幅
+            val batchRunning = BatchFavController.job?.isActive == true
+            val currentTask = batchTask
+            if (currentTask != null && currentTask.status in setOf(BATCH_STATUS_RUNNING, BATCH_STATUS_INTERRUPTED)) {
+                BatchFavBanner(
+                    task = currentTask,
+                    running = batchRunning,
+                    onCancel = { cancelBatchFav() },
+                    onResume = {
+                        launch {
+                            // 重续：重新执行当前列表，已收藏者跳过并计入成功
+                            resumeBatchFav(data.itemSnapshotList.items.toList(), currentTask)
+                        }
+                    },
+                    topPadding = contentPadding.calculateTopPadding(),
+                )
+            }
+        }
     }
 
     // 获取当前已加载的画廊列表（LazyPagingItems）
     val currentGalleryList = data.itemSnapshotList.items
-    // 批量收藏任务处理状态下防止重复点击
-    var isProcessing by remember { mutableStateOf(false) }
-    var batchFavJob: Job? = null
     val gotoTitle = stringResource(R.string.go_to)
     val invalidNum = stringResource(R.string.error_invalid_number)
     val outOfRange = stringResource(R.string.error_out_of_range)
@@ -954,55 +951,21 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
             }
         }
         onClick(Icons.Default.Bookmarks) {
-            if (!isProcessing) {
-                isProcessing = true
-                var successCount = 0
-                batchFavJob = launch {
-                    try {
-                        awaitConfirmationOrCancel {
-                            Text(text = "警告：确定要将当前已加载的 ${currentGalleryList.size} 个画廊全部收藏到默认收藏夹?")
-                        }
-                        val defaultFavSlot = Settings.defaultFavSlot
-                        val slowfav = defaultFavSlot != -1
-                        currentGalleryList.chunked(10).forEach { chunk ->
-                            chunk.forEach { galleryInfo ->
-                                ensureActive()
-                                val isFavorited = galleryInfo.favoriteSlot != NOT_FAVORITED
-                                if (!isFavorited) {
-                                    runSuspendCatching {
-                                        modifyFavorites(galleryInfo, showSuccessToast = false)
-                                    }.onSuccess { successCount++ }
-                                    if (slowfav) {
-                                        delay(4000)
-                                    }
-                                    delay(100) // 每个画廊处理完延迟100毫秒
-                                } else {
-                                    successCount++
-                                }
-                            }
-                            ensureActive()
-                            // delay(200) // 每组画廊处理完延迟200毫秒
-                            // if (slowfav) {
-                            //     delay(5000)
-                            // }
-                            launch {
-                                showSnackbar("少女祈祷中 ($successCount/${currentGalleryList.size})……")
-                            }
-                        }
-                        showSnackbar("成功收藏 $successCount/${currentGalleryList.size} 个画廊")
-                    } catch (e: CancellationException) {
-                        showSnackbar("任务中止，已处理收藏 $successCount 个画廊")
-                    } finally {
-                        isProcessing = false
-                        batchFavJob = null
+            if (BatchFavController.job?.isActive != true) {
+                launch {
+                    awaitConfirmationOrCancel {
+                        Text(text = "警告：确定要将当前已加载的 ${currentGalleryList.size} 个画廊全部收藏到默认收藏夹?")
                     }
+                    // app 级后台执行（不随 UI 取消），进度写入 Room 便于恢复
+                    startBatchFav(currentGalleryList.toList())
                 }
             } else {
                 launch {
                     awaitConfirmationOrCancel {
                         Text(text = "中止当前的收藏任务?")
                     }
-                    batchFavJob?.cancel(CancellationException("手动中止"))
+                    // 手动终止：仅取消剩余任务，已处理进度保留
+                    cancelBatchFav()
                 }
             }
         }
@@ -1035,6 +998,95 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
 }
 
 private const val TOPLIST_PAGES = 200
+
+// 过滤输入智能识别：复合($/逗号) > 标题("...") > 命名空间(artist:/uploader:等) > 裸文本标题
+private fun recognizeFilterInput(raw: String): Triple<String, FilterMode, String> {
+    // 1. 含 $ 或逗号 → 复合标签（TAG_GROUP）：去掉 $ 操作符，按逗号拆分令牌并展开缩写
+    if ('$' in raw || ',' in raw) {
+        val processed = raw.replace("$", "")
+            .split(',')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .joinToString(",") { token -> expandTagAbbreviation(token) }
+        return Triple(processed, FilterMode.TAG_GROUP, "复合标签")
+    }
+    // 2. "..." 包裹 → 标题
+    if (raw.length > 1 && raw.startsWith('"') && raw.endsWith('"')) {
+        return Triple(raw.removeSurrounding("\"").trim(), FilterMode.TITLE, "标题")
+    }
+    // 3. 带命名空间前缀 → 对应单标签/上传者（先展开缩写再判定）
+    val expanded = expandTagAbbreviation(raw)
+    if (expanded.startsWith("uploader:")) {
+        return Triple(expanded.removePrefix("uploader:").trim(), FilterMode.UPLOADER, "上传者")
+    }
+    val namespaces = listOf(
+        "parody:", "female:", "male:", "artist:", "mixed:", "other:",
+        "language:", "group:", "character:", "cosplayer:",
+    )
+    if (namespaces.any { expanded.startsWith(it) }) {
+        return Triple(expanded, FilterMode.TAG, "单标签")
+    }
+    // 4. 其余裸文本 → 标题
+    return Triple(raw, FilterMode.TITLE, "标题")
+}
+
+// 展开标签缩写（cos:/p:/f:/m:/a:/x:/o:/l:/g:/c:），只在令牌开头匹配，
+// 避免旧的全局替换把 "group:" 误替换成 "grouparody:" 等顺序 bug
+private fun expandTagAbbreviation(token: String): String = when {
+    token.startsWith("cos:") -> "cosplayer:" + token.removePrefix("cos:")
+    token.startsWith("p:") -> "parody:" + token.removePrefix("p:")
+    token.startsWith("f:") -> "female:" + token.removePrefix("f:")
+    token.startsWith("m:") -> "male:" + token.removePrefix("m:")
+    token.startsWith("a:") -> "artist:" + token.removePrefix("a:")
+    token.startsWith("x:") -> "mixed:" + token.removePrefix("x:")
+    token.startsWith("o:") -> "other:" + token.removePrefix("o:")
+    token.startsWith("l:") -> "language:" + token.removePrefix("l:")
+    token.startsWith("g:") -> "group:" + token.removePrefix("g:")
+    token.startsWith("c:") -> "character:" + token.removePrefix("c:")
+    else -> token
+}
+
+// 批量收藏进度横幅：运行中显示中止，中断/无存活任务时显示重续
+@Composable
+private fun BatchFavBanner(
+    task: BatchFavTask,
+    running: Boolean,
+    onCancel: () -> Unit,
+    onResume: () -> Unit,
+    topPadding: Dp,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(top = topPadding + 8.dp),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        tonalElevation = 2.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            LinearProgressIndicator(
+                progress = { if (task.total > 0) task.done.toFloat() / task.total else 0f },
+                modifier = Modifier.width(64.dp),
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = "批量收藏 ${if (running) "进行中" else "已中断"}：${task.done}/${task.total}",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            if (running) {
+                TextButton(onClick = onCancel) {
+                    Text(text = "中止")
+                }
+            } else {
+                TextButton(onClick = onResume) {
+                    Text(text = "重续")
+                }
+            }
+        }
+    }
+}
 
 @Composable
 @Stable

@@ -182,6 +182,8 @@ object Settings : DataStorePreferences(null) {
     var syncFav by boolPref("sync_fav", false)
     var sapiUrl by stringOrNullPref("sapi_url", null)
     var papiUrl by stringOrNullPref("papi_url", null)
+    var apiToken by stringOrNullPref("api_token", null)
+    var pqUrl by stringOrNullPref("pq_url", null)
     var addKeyword by stringOrNullPref("add_keyword", null)
     var hideFav by boolPref("hide_fav", true)
     var hideFavInHistory by boolPref("hide_fav_in_history", false)

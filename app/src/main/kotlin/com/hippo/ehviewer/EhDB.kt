@@ -40,6 +40,8 @@ import com.hippo.ehviewer.dao.SyncOutbox
 import com.hippo.ehviewer.download.DownloadManager
 import com.hippo.ehviewer.util.sendTo
 import io.ktor.client.call.body
+import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
@@ -53,6 +55,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okio.Path
 import okio.Path.Companion.toOkioPath
 import splitties.arch.room.roomDb
@@ -72,6 +75,30 @@ data class PqApiRequest(
     val user: String,
     val itype: String,
     val icontent: String,
+)
+
+// 优先队列单画廊条目（GET /pq_galleries?section=single / group&group=...）
+@Serializable
+data class PqGalleryItem(
+    val gid: Long = 0,
+    val token: String = "",
+    val title: String? = null,
+    val thumb: String? = null,
+    val fav_status: Int = 0,
+)
+
+// 优先队列标签组条目（GET /pq_galleries?section=group）
+@Serializable
+data class PqGroupItem(
+    val group_content: String = "",
+    val count: Int = 0,
+    val new_count: Int = 0,
+)
+
+// 兼容 {items: [...]} 信封结构的分页响应
+@Serializable
+data class PqPage<T>(
+    val items: List<T> = emptyList(),
 )
 
 // 保持一个全局的 Toast 引用
@@ -96,6 +123,12 @@ fun showToastOnMainThread(message: String) {
 // }
 
 suspend fun sendExlApiRequest(exlapirequest: ExlApiRequest, sapi: String, showSuccessToast: Boolean = true): Boolean {
+    // API Token 为空时不发送（服务器开启鉴权后会 401），提示后直接失败
+    val apiToken = Settings.apiToken
+    if (apiToken.isNullOrBlank()) {
+        showToastOnMainThread("未配置 API Token，请求已取消")
+        return false
+    }
     var retryCount = 0
     val maxRetries = 3
     val retryDelay = 5000L // 5秒
@@ -104,6 +137,7 @@ suspend fun sendExlApiRequest(exlapirequest: ExlApiRequest, sapi: String, showSu
         try {
             val response = ktorClient.post(sapi) {
                 method = HttpMethod.Post
+                header("Authorization", "Bearer $apiToken")
                 val request = exlapirequest
                 val json = Json.encodeToString(request)
                 setBody(TextContent(text = json, contentType = ContentType.Application.Json))
@@ -158,6 +192,12 @@ suspend fun sendExlApiRequest(exlapirequest: ExlApiRequest, sapi: String, showSu
 }
 
 suspend fun sendPqApiRequest(pqapirequest: PqApiRequest, papi: String): Boolean {
+    // API Token 为空时不发送（服务器开启鉴权后会 401），提示后直接失败
+    val apiToken = Settings.apiToken
+    if (apiToken.isNullOrBlank()) {
+        showToastOnMainThread("未配置 API Token，请求已取消")
+        return false
+    }
     var retryCount = 0
     val maxRetries = 3
     val retryDelay = 5000L // 5秒
@@ -166,6 +206,7 @@ suspend fun sendPqApiRequest(pqapirequest: PqApiRequest, papi: String): Boolean 
         try {
             val response = ktorClient.post(papi) {
                 method = HttpMethod.Post
+                header("Authorization", "Bearer $apiToken")
                 val request = pqapirequest
                 val json = Json.encodeToString(request)
                 setBody(TextContent(text = json, contentType = ContentType.Application.Json))
@@ -217,6 +258,70 @@ suspend fun sendPqApiRequest(pqapirequest: PqApiRequest, papi: String): Boolean 
     return false
 }
 
+// ===== 优先队列 API（GET /pq_galleries，Bearer 鉴权）=====
+
+// 优先队列响应解析用的 Json（容忍未知字段与缺省字段）
+private val pqJson = Json {
+    ignoreUnknownKeys = true
+    coerceInputValues = true
+    explicitNulls = false
+}
+
+// 兼容纯数组与 {items: [...]} 信封两种响应结构
+private inline fun <reified T> parsePqItems(body: String): List<T> = try {
+    pqJson.decodeFromString<List<T>>(body)
+} catch (_: Exception) {
+    pqJson.decodeFromString<PqPage<T>>(body).items
+}
+
+// 拼接优先队列分页请求 URL
+private fun buildPqUrl(base: String, section: String, page: Int, pageSize: Int, hideFav: Boolean, group: String?): String {
+    val builder = base.toHttpUrl().newBuilder()
+        .addQueryParameter("section", section)
+        .addQueryParameter("page", page.toString())
+        .addQueryParameter("page_size", pageSize.toString())
+        .addQueryParameter("hide_fav", if (hideFav) "1" else "0")
+    if (!group.isNullOrBlank()) {
+        builder.addQueryParameter("group", group)
+    }
+    return builder.build().toString()
+}
+
+// 优先队列 GET 请求（带 Bearer 鉴权），失败返回 null（已 toast 提示）
+private suspend fun <T> pqGet(url: String, decode: (String) -> T): T? {
+    // API Token 为空时不发送（服务器开启鉴权后会 401），提示后返回 null
+    val apiToken = Settings.apiToken
+    if (apiToken.isNullOrBlank()) {
+        showToastOnMainThread("未配置 API Token，无法请求优先队列")
+        return null
+    }
+    return try {
+        val response = ktorClient.get(url) {
+            header("Authorization", "Bearer $apiToken")
+        }
+        if (response.status.value in 200..299) {
+            decode(response.body())
+        } else {
+            showToastOnMainThread("优先队列请求失败: ${response.status}")
+            null
+        }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        showToastOnMainThread("优先队列请求异常: ${e.message}")
+        null
+    }
+}
+
+// 单画廊段（section=single），按 updated_at 倒序分页
+suspend fun fetchPqSingles(pqUrl: String, page: Int, pageSize: Int, hideFav: Boolean): List<PqGalleryItem>? = pqGet(buildPqUrl(pqUrl, "single", page, pageSize, hideFav, null)) { body -> parsePqItems<PqGalleryItem>(body) }
+
+// 标签组列表（section=group），组列表分页
+suspend fun fetchPqGroups(pqUrl: String, page: Int, pageSize: Int, hideFav: Boolean): List<PqGroupItem>? = pqGet(buildPqUrl(pqUrl, "group", page, pageSize, hideFav, null)) { body -> parsePqItems<PqGroupItem>(body) }
+
+// 组内画廊（section=group & group=<content>），组内分页
+suspend fun fetchPqGroupGalleries(pqUrl: String, group: String, page: Int, pageSize: Int, hideFav: Boolean): List<PqGalleryItem>? = pqGet(buildPqUrl(pqUrl, "group", page, pageSize, hideFav, group)) { body -> parsePqItems<PqGalleryItem>(body) }
+
 object EhDB {
     private const val DB_NAME = "eh.db"
     private val db = roomDb<EhDatabase>(DB_NAME) {
@@ -224,6 +329,8 @@ object EhDB {
     }
 
     fun syncOutboxDao() = db.syncOutboxDao()
+
+    fun batchFavTaskDao() = db.batchFavTaskDao()
 
     suspend fun enqueueSyncOutbox(api: String, payload: String) {
         db.syncOutboxDao().insert(SyncOutbox(api = api, payload = payload, createdAt = System.currentTimeMillis()))

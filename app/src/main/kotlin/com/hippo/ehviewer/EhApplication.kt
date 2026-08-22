@@ -220,6 +220,9 @@ class EhApplication :
     }
 
     companion object {
+        // app 级协程作用域：批量收藏等后台任务不随 UI/页面取消
+        val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
         val ktorClient by lazy {
             if (Settings.enableQuic) {
                 HttpClient(Cronet) {

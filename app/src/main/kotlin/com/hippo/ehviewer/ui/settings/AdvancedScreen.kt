@@ -256,6 +256,36 @@ fun AnimatedVisibilityScope.AdvancedScreen(navigator: DestinationsNavigator) = S
                     papiUrl = newPapiUrl.ifBlank { null }
                 }
             }
+            var pqUrl by Settings::pqUrl.observed
+            Preference(
+                title = "优先队列地址 (PQ URL)",
+                summary = pqUrl ?: "Not set",
+            ) {
+                coroutineScope.launch {
+                    val newPqUrl = awaitInputText(
+                        initial = pqUrl ?: "",
+                        title = "Set PQ Endpoint",
+                        hint = "https://api.example.com/pq_galleries",
+                    )
+                    // 空字符串转为 null 存储
+                    pqUrl = newPqUrl.ifBlank { null }
+                }
+            }
+            var apiToken by Settings::apiToken.observed
+            Preference(
+                title = "API Token",
+                summary = apiToken?.let { "已配置 (${it.take(4)}…)" } ?: "Not set",
+            ) {
+                coroutineScope.launch {
+                    val newApiToken = awaitInputText(
+                        initial = apiToken ?: "",
+                        title = "Set API Token",
+                        hint = "与服务器 server.api_token 保持一致",
+                    )
+                    // 空字符串转为 null 存储
+                    apiToken = newApiToken.ifBlank { null }
+                }
+            }
             var addKeyword by Settings::addKeyword.observed
             Preference(
                 title = "AddKeyword",
