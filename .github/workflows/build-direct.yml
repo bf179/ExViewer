@@ -18,7 +18,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version-file: EhViewer/.java-version   # 基线与上游一致（当前 25）
 
       - name: Prepare tree (ujui patches + my patches)
         run: bash scripts/prepare-build.sh direct
