@@ -1,9 +1,9 @@
 diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/HideListScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/HideListScreen.kt
 new file mode 100644
-index 000000000..7b91929bb
+index 000000000..ddb8f4cdf
 --- /dev/null
 +++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/HideListScreen.kt
-@@ -0,0 +1,285 @@
+@@ -0,0 +1,262 @@
 +package com.hippo.ehviewer.ui.settings
 +
 +import androidx.compose.animation.AnimatedVisibilityScope
@@ -20,7 +20,6 @@ index 000000000..7b91929bb
 +import androidx.compose.foundation.text.KeyboardOptions
 +import androidx.compose.foundation.text.input.TextFieldLineLimits
 +import androidx.compose.foundation.text.input.rememberTextFieldState
-+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 +import androidx.compose.material.icons.Icons
 +import androidx.compose.material.icons.automirrored.filled.Help
 +import androidx.compose.material.icons.filled.Add
@@ -29,10 +28,7 @@ index 000000000..7b91929bb
 +import androidx.compose.material.icons.filled.VisibilityOff
 +import androidx.compose.material3.AlertDialog
 +import androidx.compose.material3.ButtonDefaults
-+import androidx.compose.material3.DropdownMenuItem
-+import androidx.compose.material3.ExposedDropdownMenuAnchorType
-+import androidx.compose.material3.ExposedDropdownMenuBox
-+import androidx.compose.material3.ExposedDropdownMenuDefaults
++import androidx.compose.material3.FilterChip
 +import androidx.compose.material3.FloatingActionButton
 +import androidx.compose.material3.Icon
 +import androidx.compose.material3.IconButton
@@ -47,6 +43,7 @@ index 000000000..7b91929bb
 +import androidx.compose.runtime.Composable
 +import androidx.compose.runtime.LaunchedEffect
 +import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableIntStateOf
 +import androidx.compose.runtime.mutableStateListOf
 +import androidx.compose.runtime.mutableStateOf
 +import androidx.compose.runtime.remember
@@ -73,6 +70,7 @@ index 000000000..7b91929bb
 +import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 +import kotlin.coroutines.resume
 +
++// 与 EhHideList 的 hideType 一一对应：下标 + 1
 +private val HIDE_TYPE_NAMES = arrayOf("标题", "上传者", "标签")
 +
 +private fun typeName(hideType: Int): String = when (hideType) {
@@ -102,7 +100,7 @@ index 000000000..7b91929bb
 +    fun addEntry() {
 +        launch {
 +            dialog { cont ->
-+                val type = rememberTextFieldState(HIDE_TYPE_NAMES[0])
++                var selectedIndex by remember { mutableIntStateOf(0) }
 +                val state = rememberTextFieldState()
 +                var error by remember { mutableStateOf<String?>(null) }
 +                fun invalidateAndSave() {
@@ -110,7 +108,7 @@ index 000000000..7b91929bb
 +                        error = textIsEmpty
 +                        return
 +                    }
-+                    val hideType = HIDE_TYPE_NAMES.indexOf(type.text) + 1
++                    val hideType = selectedIndex + 1
 +                    val text = state.text.toString().trim()
 +                    launch {
 +                        if (EhHideList.entries().any { it.hideType == hideType && it.name == text }) {
@@ -138,37 +136,16 @@ index 000000000..7b91929bb
 +                    },
 +                    title = { Text(text = "添加隐藏条目") },
 +                    text = {
-+                        var expanded by remember { mutableStateOf(false) }
-+                        Column {
-+                            ExposedDropdownMenuBox(
-+                                expanded = expanded,
-+                                onExpandedChange = { expanded = !expanded },
-+                            ) {
-+                                OutlinedTextField(
-+                                    modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
-+                                    readOnly = true,
-+                                    state = type,
-+                                    label = { Text(text = "隐藏类型") },
-+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-+                                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-+                                )
-+                                ExposedDropdownMenu(
-+                                    expanded = expanded,
-+                                    onDismissRequest = { expanded = false },
-+                                ) {
-+                                    HIDE_TYPE_NAMES.forEach {
-+                                        DropdownMenuItem(
-+                                            text = { Text(text = it) },
-+                                            onClick = {
-+                                                expanded = false
-+                                                type.setTextAndPlaceCursorAtEnd(it)
-+                                            },
-+                                            contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
-+                                        )
-+                                    }
++                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
++                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++                                HIDE_TYPE_NAMES.forEachIndexed { index, name ->
++                                    FilterChip(
++                                        selected = selectedIndex == index,
++                                        onClick = { selectedIndex = index },
++                                        label = { Text(text = name) },
++                                    )
 +                                }
 +                            }
-+                            Spacer(modifier = Modifier.size(16.dp))
 +                            val isError = error != null
 +                            OutlinedTextField(
 +                                state = state,
