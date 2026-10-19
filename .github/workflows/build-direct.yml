@@ -38,4 +38,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ExViewer-direct-${{ github.run_number }}
-          path: EhViewer/app/build/outputs/apk/release/*.apk
+          path: EhViewer/app/build/outputs/apk/**/*.apk
