@@ -1,0 +1,95 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt b/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt
+index 122ec85ed..5b51db830 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt
+@@ -192,6 +192,9 @@ object EhDB {
+ 
+     suspend fun getAllQuickSearch() = db.quickSearchDao().list()
+ 
++    /** 隐藏列表规则（HIDE_TYPE != 0），见 EhHideList */
++    suspend fun getHideList() = db.quickSearchDao().list().filter { it.hideType != 0 }
++
+     suspend fun insertQuickSearch(quickSearch: QuickSearch) {
+         val dao = db.quickSearchDao()
+         quickSearch.id = dao.insert(quickSearch)
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt
+index 72be43ba8..7c0e6d08b 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt
+@@ -471,6 +471,8 @@ object EhEngine {
+ 
+     private suspend fun MutableList<BaseGalleryInfo>.fillInfo(url: String, filter: Boolean = false) = with(EhFilter) {
+         if (filter) removeAllSuspend { filterTitle(it) || filterUploader(it) }
++        // 隐藏列表独立于「过滤」开关，始终生效
++        removeAllSuspend { EhHideList.hide(it) }
+         val hasTags = any { !it.simpleTags.isNullOrEmpty() }
+         val hasPages = any { it.pages != 0 }
+         val hasRated = any { it.rated }
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/EhHideList.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/EhHideList.kt
+new file mode 100644
+index 000000000..a75f0a356
+--- /dev/null
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/EhHideList.kt
+@@ -0,0 +1,62 @@
++package com.hippo.ehviewer.client
++
++import com.ehviewer.core.database.model.QuickSearch
++import com.ehviewer.core.model.GalleryInfo
++import com.hippo.ehviewer.EhDB
++import kotlinx.coroutines.sync.Mutex
++import kotlinx.coroutines.sync.withLock
++
++/**
++ * 隐藏列表：把命中规则的画廊从列表中剔除。
++ *
++ * 规则复用 QUICK_SEARCH 表（HIDE_TYPE != 0），与旧版数据完全兼容：
++ *  0 = 普通快速搜索（不是隐藏规则）
++ *  1 = 隐藏标题（包含匹配，忽略大小写）
++ *  2 = 隐藏上传者（相等匹配，忽略大小写）
++ *  3 = 隐藏标签（任一标签相等匹配，忽略大小写）
++ */
++object EhHideList {
++    const val TYPE_QUICK_SEARCH = 0
++    const val TYPE_TITLE = 1
++    const val TYPE_UPLOADER = 2
++    const val TYPE_TAG = 3
++
++    @Volatile
++    private var cache: List<QuickSearch>? = null
++
++    private val mutex = Mutex()
++
++    /** 取全部隐藏规则（内存缓存，写操作后失效） */
++    suspend fun entries(): List<QuickSearch> = cache ?: mutex.withLock {
++        cache ?: EhDB.getHideList().also { cache = it }
++    }
++
++    fun invalidate() {
++        cache = null
++    }
++
++    private fun matches(entry: QuickSearch, info: GalleryInfo): Boolean = when (entry.hideType) {
++        TYPE_TITLE -> info.title.orEmpty().contains(entry.name, ignoreCase = true)
++        TYPE_UPLOADER -> info.uploader.orEmpty().equals(entry.name, ignoreCase = true)
++        TYPE_TAG -> info.simpleTags?.any { it.equals(entry.name, ignoreCase = true) } == true
++        else -> false
++    }
++
++    /** 该画廊是否应被隐藏 */
++    suspend fun hide(info: GalleryInfo): Boolean = entries().any { it.hideType != TYPE_QUICK_SEARCH && matches(it, info) }
++
++    suspend fun add(entry: QuickSearch) {
++        EhDB.insertQuickSearch(entry)
++        invalidate()
++    }
++
++    suspend fun remove(entry: QuickSearch) {
++        EhDB.deleteQuickSearch(entry)
++        invalidate()
++    }
++
++    suspend fun update(list: List<QuickSearch>) {
++        EhDB.updateQuickSearch(list)
++        invalidate()
++    }
++}
