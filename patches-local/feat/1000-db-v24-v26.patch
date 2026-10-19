@@ -1,0 +1,270 @@
+diff --git a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/Database.kt b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/Database.kt
+index 3783f34d0..01d09b329 100644
+--- a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/Database.kt
++++ b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/Database.kt
+@@ -4,6 +4,7 @@ import androidx.room.AutoMigration
+ import androidx.room.Database
+ import androidx.room.RoomDatabase
+ import androidx.room.TypeConverters
++import com.ehviewer.core.database.dao.BatchFavTaskDao
+ import com.ehviewer.core.database.dao.DownloadArtistDao
+ import com.ehviewer.core.database.dao.DownloadDirnameDao
+ import com.ehviewer.core.database.dao.DownloadLabelDao
+@@ -13,8 +14,11 @@ import com.ehviewer.core.database.dao.GalleryDao
+ import com.ehviewer.core.database.dao.HistoryDao
+ import com.ehviewer.core.database.dao.LocalFavoritesDao
+ import com.ehviewer.core.database.dao.ProgressDao
++import com.ehviewer.core.database.dao.PqTagDao
+ import com.ehviewer.core.database.dao.QuickSearchDao
+ import com.ehviewer.core.database.dao.SearchDao
++import com.ehviewer.core.database.dao.SyncOutboxDao
++import com.ehviewer.core.database.model.BatchFavTask
+ import com.ehviewer.core.database.model.DownloadArtist
+ import com.ehviewer.core.database.model.DownloadDirname
+ import com.ehviewer.core.database.model.DownloadEntity
+@@ -25,17 +29,20 @@ import com.ehviewer.core.database.model.GalleryEntity
+ import com.ehviewer.core.database.model.GalleryFtsEntity
+ import com.ehviewer.core.database.model.HistoryInfo
+ import com.ehviewer.core.database.model.LocalFavoriteInfo
++import com.ehviewer.core.database.model.PqTag
+ import com.ehviewer.core.database.model.ProgressInfo
+ import com.ehviewer.core.database.model.QuickSearch
+ import com.ehviewer.core.database.model.Search
++import com.ehviewer.core.database.model.SyncOutbox
+ 
+ @Database(
+     entities = [
+         GalleryEntity::class, DownloadLabel::class, DownloadEntity::class, DownloadDirname::class, DownloadArtist::class,
+         Filter::class, HistoryInfo::class, LocalFavoriteInfo::class, ProgressInfo::class, QuickSearch::class,
+         GalleryFtsEntity::class,
++        SyncOutbox::class, BatchFavTask::class, PqTag::class,
+     ],
+-    version = 23,
++    version = 26,
+     exportSchema = true,
+     autoMigrations = [
+         AutoMigration(from = 4, to = 5, spec = Schema4to5::class),
+@@ -56,6 +63,10 @@ import com.ehviewer.core.database.model.Search
+         AutoMigration(from = 20, to = 21, spec = Schema20to21::class),
+         AutoMigration(from = 21, to = 22, spec = Schema21to22::class),
+         AutoMigration(from = 22, to = 23),
++        // v24: 离线同步队列；v25: 批量收藏任务；v26: 优先队列标签 + 隐藏类型
++        AutoMigration(from = 23, to = 24),
++        AutoMigration(from = 24, to = 25),
++        AutoMigration(from = 25, to = 26),
+     ],
+ )
+ @TypeConverters(FilterModeConverter::class)
+@@ -70,6 +81,9 @@ abstract class EhDatabase : RoomDatabase() {
+     abstract fun localFavoritesDao(): LocalFavoritesDao
+     abstract fun progressDao(): ProgressDao
+     abstract fun quickSearchDao(): QuickSearchDao
++    abstract fun syncOutboxDao(): SyncOutboxDao
++    abstract fun batchFavTaskDao(): BatchFavTaskDao
++    abstract fun pqTagDao(): PqTagDao
+ }
+ 
+ @Database(
+diff --git a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/dao/BatchFavTaskDao.kt b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/dao/BatchFavTaskDao.kt
+new file mode 100644
+index 000000000..d1b803ed1
+--- /dev/null
++++ b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/dao/BatchFavTaskDao.kt
+@@ -0,0 +1,35 @@
++package com.ehviewer.core.database.dao
++
++import androidx.room.Dao
++import androidx.room.Insert
++import androidx.room.Query
++import androidx.room.Update
++import com.ehviewer.core.database.model.BatchFavTask
++import kotlinx.coroutines.flow.Flow
++
++@Dao
++interface BatchFavTaskDao {
++    @Insert
++    suspend fun insert(task: BatchFavTask): Long
++
++    @Update
++    suspend fun update(task: BatchFavTask)
++
++    @Query("SELECT * FROM batch_fav_tasks WHERE id = :id")
++    suspend fun getById(id: Long): BatchFavTask?
++
++    @Query("SELECT * FROM batch_fav_tasks ORDER BY createdAt DESC LIMIT 1")
++    suspend fun latest(): BatchFavTask?
++
++    @Query("SELECT * FROM batch_fav_tasks WHERE status IN ('running', 'interrupted') ORDER BY createdAt DESC")
++    suspend fun resumable(): List<BatchFavTask>
++
++    @Query("SELECT * FROM batch_fav_tasks ORDER BY createdAt DESC")
++    fun listFlow(): Flow<List<BatchFavTask>>
++
++    @Query("DELETE FROM batch_fav_tasks WHERE id = :id")
++    suspend fun deleteById(id: Long)
++
++    @Query("DELETE FROM batch_fav_tasks WHERE status = 'done'")
++    suspend fun clearDone()
++}
+diff --git a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/dao/PqTagDao.kt b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/dao/PqTagDao.kt
+new file mode 100644
+index 000000000..d4f339127
+--- /dev/null
++++ b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/dao/PqTagDao.kt
+@@ -0,0 +1,19 @@
++package com.ehviewer.core.database.dao
++
++import androidx.room.Dao
++import androidx.room.Insert
++import androidx.room.OnConflictStrategy
++import androidx.room.Query
++import com.ehviewer.core.database.model.PqTag
++
++@Dao
++interface PqTagDao {
++    @Query("SELECT tag FROM pq_tag")
++    suspend fun getAll(): List<String>
++
++    @Query("DELETE FROM pq_tag")
++    suspend fun clear()
++
++    @Insert(onConflict = OnConflictStrategy.REPLACE)
++    suspend fun insertAll(tags: List<PqTag>)
++}
+diff --git a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/dao/SyncOutboxDao.kt b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/dao/SyncOutboxDao.kt
+new file mode 100644
+index 000000000..c91c542f9
+--- /dev/null
++++ b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/dao/SyncOutboxDao.kt
+@@ -0,0 +1,28 @@
++package com.ehviewer.core.database.dao
++
++import androidx.room.Dao
++import androidx.room.Insert
++import androidx.room.Query
++import com.ehviewer.core.database.model.SyncOutbox
++import kotlinx.coroutines.flow.Flow
++
++@Dao
++interface SyncOutboxDao {
++    @Query("SELECT * FROM sync_outbox ORDER BY createdAt ASC")
++    suspend fun list(): List<SyncOutbox>
++
++    @Query("SELECT COUNT(*) FROM sync_outbox")
++    suspend fun count(): Int
++
++    @Query("SELECT COUNT(*) FROM sync_outbox")
++    fun countFlow(): Flow<Int>
++
++    @Insert
++    suspend fun insert(item: SyncOutbox): Long
++
++    @Query("DELETE FROM sync_outbox WHERE id = :id")
++    suspend fun deleteById(id: Long)
++
++    @Query("DELETE FROM sync_outbox")
++    suspend fun clear()
++}
+diff --git a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/model/BatchFavTask.kt b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/model/BatchFavTask.kt
+new file mode 100644
+index 000000000..017442d0c
+--- /dev/null
++++ b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/model/BatchFavTask.kt
+@@ -0,0 +1,31 @@
++package com.ehviewer.core.database.model
++
++import androidx.room.ColumnInfo
++import androidx.room.Entity
++import androidx.room.PrimaryKey
++
++/**
++ * 批量收藏任务进度（app 级后台执行，可断点续跑）。
++ * status: running / done / failed / interrupted
++ */
++@Entity(tableName = "batch_fav_tasks")
++data class BatchFavTask(
++    @PrimaryKey(autoGenerate = true)
++    @ColumnInfo(name = "id")
++    val id: Long = 0,
++
++    @ColumnInfo(name = "status")
++    val status: String,
++
++    @ColumnInfo(name = "total")
++    val total: Int,
++
++    @ColumnInfo(name = "done")
++    val done: Int,
++
++    @ColumnInfo(name = "createdAt")
++    val createdAt: Long,
++
++    @ColumnInfo(name = "updatedAt")
++    val updatedAt: Long,
++)
+diff --git a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/model/PqTag.kt b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/model/PqTag.kt
+new file mode 100644
+index 000000000..2231c5bde
+--- /dev/null
++++ b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/model/PqTag.kt
+@@ -0,0 +1,16 @@
++package com.ehviewer.core.database.model
++
++import androidx.room.ColumnInfo
++import androidx.room.Entity
++import androidx.room.PrimaryKey
++
++/**
++ * 优先队列标签缓存（从自建服务 GET /pq_tags 拉取）。
++ * 用于隐藏优先队列里已标记的画廊。
++ */
++@Entity(tableName = "pq_tag")
++data class PqTag(
++    @PrimaryKey
++    @ColumnInfo(name = "tag")
++    val tag: String,
++)
+diff --git a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/model/QuickSearch.kt b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/model/QuickSearch.kt
+index f60377686..403da8d42 100644
+--- a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/model/QuickSearch.kt
++++ b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/model/QuickSearch.kt
+@@ -36,4 +36,8 @@ data class QuickSearch(
+ 
+     @ColumnInfo(name = "POSITION")
+     var position: Int = 0,
++
++    // 隐藏类型：0=普通快速搜索；1=隐藏标题；2=隐藏上传者；3=隐藏标签（v26 新增）
++    @ColumnInfo(name = "HIDE_TYPE", defaultValue = "0")
++    var hideType: Int = 0,
+ )
+diff --git a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/model/SyncOutbox.kt b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/model/SyncOutbox.kt
+new file mode 100644
+index 000000000..ff8a4945d
+--- /dev/null
++++ b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/model/SyncOutbox.kt
+@@ -0,0 +1,25 @@
++package com.ehviewer.core.database.model
++
++import androidx.room.ColumnInfo
++import androidx.room.Entity
++import androidx.room.PrimaryKey
++
++/**
++ * 离线同步队列：把 SAPI/PAPI 请求暂存本地，联网后重放。
++ * 列名与旧版保持一致（导入导出兼容）。
++ */
++@Entity(tableName = "sync_outbox")
++data class SyncOutbox(
++    @PrimaryKey(autoGenerate = true)
++    @ColumnInfo(name = "id")
++    val id: Long = 0,
++
++    @ColumnInfo(name = "api")
++    val api: String,
++
++    @ColumnInfo(name = "payload")
++    val payload: String,
++
++    @ColumnInfo(name = "createdAt")
++    val createdAt: Long,
++)
