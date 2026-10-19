@@ -1,0 +1,33 @@
+name: Build (direct)
+
+# 直连版：ujui 基线 + 我的功能补丁
+on:
+  push:
+    branches: [v2/ujui-direct, main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Prepare tree (ujui patches + my patches)
+        run: bash scripts/prepare-build.sh direct
+
+      - name: Build release
+        working-directory: EhViewer
+        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ExViewer-direct-${{ github.run_number }}
+          path: EhViewer/app/build/outputs/apk/release/*.apk
