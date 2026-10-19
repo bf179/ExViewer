@@ -20,11 +20,13 @@ jobs:
           distribution: temurin
           java-version-file: EhViewer/.java-version   # 基线与上游一致（当前 25）
 
-      - name: Install Rust Android targets
+      - name: Install Rust (pinned toolchain) + Android targets
+        working-directory: EhViewer
         run: |
+          cat rust-toolchain.toml
           rustup show
           rustup target add aarch64-linux-android armv7-linux-androideabi \
-            thumbv7neon-linux-androideabi x86_64-linux-android i686-linux-android
+            thumbv7neon-linux-androideabi x86_64-linux-android
 
       - name: Prepare tree (ujui patches + my patches)
         run: bash scripts/prepare-build.sh direct
