@@ -32,6 +32,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.automirrored.filled.LastPage
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.Flag
@@ -105,6 +106,7 @@ import com.hippo.ehviewer.client.EhCookieStore.KEY_IGNEOUS
 import com.hippo.ehviewer.client.EhCookieStore.KEY_IPB_MEMBER_ID
 import com.hippo.ehviewer.client.EhCookieStore.KEY_IPB_PASS_HASH
 import com.hippo.ehviewer.client.EhEngine
+import com.hippo.ehviewer.client.EhFilter
 import com.hippo.ehviewer.client.EhFilter.remember
 import com.hippo.ehviewer.client.EhTagDatabase
 import com.hippo.ehviewer.client.EhUtils
@@ -121,6 +123,7 @@ import com.hippo.ehviewer.client.data.ListUrlBuilder.Companion.MODE_UPLOADER
 import com.hippo.ehviewer.client.data.ListUrlBuilder.Companion.MODE_WHATS_HOT
 import com.hippo.ehviewer.client.parser.GalleryDetailUrlParser
 import com.hippo.ehviewer.client.parser.GalleryPageUrlParser
+import com.hippo.ehviewer.client.recognizeFilterInput
 import com.hippo.ehviewer.collectAsState
 import com.hippo.ehviewer.dao.BatchFavTask
 import com.hippo.ehviewer.dao.Filter
@@ -373,7 +376,7 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                                     }
                                     val (processedText, filterMode, modeDisplayName) = recognizeFilterInput(rawInput)
                                     awaitConfirmationOrCancel {
-                                        Text(text = "屏蔽 \"$processedText\" ($modeDisplayName)?")
+                                        Text(text = "识别模式：$modeDisplayName\n屏蔽 \"$processedText\"?")
                                     }
                                     withContext(Dispatchers.IO) {
                                         Filter(filterMode, processedText).remember()
@@ -449,6 +452,41 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
                         Icon(
                             imageVector = Icons.Default.Add,
                             contentDescription = stringResource(id = R.string.add),
+                        )
+                    }
+                    // 快捷添加隐藏列表：复用智能识别逻辑（模式→HIDE_TYPE：标题1/上传者2/标签与复合3）
+                    IconButton(
+                        onClick = {
+                            launch {
+                                if (urlBuilder.mode == MODE_IMAGE_SEARCH) {
+                                    showSnackbar("图片搜索不能添加到隐藏列表")
+                                    return@launch
+                                }
+                                val rawInput = searchFieldState.text.toString().trim()
+                                if (rawInput.isEmpty()) {
+                                    showSnackbar("搜索框为空，无法添加隐藏列表")
+                                    return@launch
+                                }
+                                val (processedText, filterMode, modeDisplayName) = recognizeFilterInput(rawInput)
+                                awaitConfirmationOrCancel {
+                                    Text(text = "识别模式：$modeDisplayName\n内容：$processedText\n\n确认添加到隐藏列表?")
+                                }
+                                withContext(Dispatchers.IO) {
+                                    val hideType = when (filterMode) {
+                                        FilterMode.TITLE -> 1
+                                        FilterMode.UPLOADER -> 2
+                                        else -> 3
+                                    }
+                                    EhDB.addHideEntry(processedText, hideType)
+                                    EhFilter.refreshHideList()
+                                }
+                                showSnackbar("已添加到隐藏列表")
+                            }
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Block,
+                            contentDescription = "Add hide list item",
                         )
                     }
                 },
@@ -1006,53 +1044,6 @@ fun AnimatedVisibilityScope.GalleryListScreen(lub: ListUrlBuilder, navigator: De
 }
 
 private const val TOPLIST_PAGES = 200
-
-// 过滤输入智能识别：复合($/逗号) > 标题("...") > 命名空间(artist:/uploader:等) > 裸文本标题
-private fun recognizeFilterInput(raw: String): Triple<String, FilterMode, String> {
-    // 1. 含 $ 或逗号 → 复合标签（TAG_GROUP）：去掉 $ 操作符，按逗号拆分令牌并展开缩写
-    if ('$' in raw || ',' in raw) {
-        val processed = raw.replace("$", "")
-            .split(',')
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .joinToString(",") { token -> expandTagAbbreviation(token) }
-        return Triple(processed, FilterMode.TAG_GROUP, "复合标签")
-    }
-    // 2. "..." 包裹 → 标题
-    if (raw.length > 1 && raw.startsWith('"') && raw.endsWith('"')) {
-        return Triple(raw.removeSurrounding("\"").trim(), FilterMode.TITLE, "标题")
-    }
-    // 3. 带命名空间前缀 → 对应单标签/上传者（先展开缩写再判定）
-    val expanded = expandTagAbbreviation(raw)
-    if (expanded.startsWith("uploader:")) {
-        return Triple(expanded.removePrefix("uploader:").trim(), FilterMode.UPLOADER, "上传者")
-    }
-    val namespaces = listOf(
-        "parody:", "female:", "male:", "artist:", "mixed:", "other:",
-        "language:", "group:", "character:", "cosplayer:",
-    )
-    if (namespaces.any { expanded.startsWith(it) }) {
-        return Triple(expanded, FilterMode.TAG, "单标签")
-    }
-    // 4. 其余裸文本 → 标题
-    return Triple(raw, FilterMode.TITLE, "标题")
-}
-
-// 展开标签缩写（cos:/p:/f:/m:/a:/x:/o:/l:/g:/c:），只在令牌开头匹配，
-// 避免旧的全局替换把 "group:" 误替换成 "grouparody:" 等顺序 bug
-private fun expandTagAbbreviation(token: String): String = when {
-    token.startsWith("cos:") -> "cosplayer:" + token.removePrefix("cos:")
-    token.startsWith("p:") -> "parody:" + token.removePrefix("p:")
-    token.startsWith("f:") -> "female:" + token.removePrefix("f:")
-    token.startsWith("m:") -> "male:" + token.removePrefix("m:")
-    token.startsWith("a:") -> "artist:" + token.removePrefix("a:")
-    token.startsWith("x:") -> "mixed:" + token.removePrefix("x:")
-    token.startsWith("o:") -> "other:" + token.removePrefix("o:")
-    token.startsWith("l:") -> "language:" + token.removePrefix("l:")
-    token.startsWith("g:") -> "group:" + token.removePrefix("g:")
-    token.startsWith("c:") -> "character:" + token.removePrefix("c:")
-    else -> token
-}
 
 // 批量收藏进度横幅：运行中显示中止，中断/无存活任务时显示重续
 @Composable

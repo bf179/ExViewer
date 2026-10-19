@@ -20,6 +20,8 @@ import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenuItem
@@ -61,12 +63,13 @@ import com.ramcosta.composedestinations.navigation.DestinationsNavigator
 import kotlin.coroutines.resume
 import kotlinx.coroutines.launch
 
-// 隐藏列表管理：标题/上传者/标签三类隐藏条目增删（无逐条开关）
+// 隐藏列表管理：标题/上传者/标签三类隐藏条目增删（无逐条开关），支持本地搜索与服务器同步
 @Destination<RootGraph>
 @Composable
 fun AnimatedVisibilityScope.HideListScreen(navigator: DestinationsNavigator) = Screen(navigator) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     val hideEntries = remember { mutableStateListOf<QuickSearch>() }
+    val searchState = rememberTextFieldState()
     val animateItems by Settings.animateItems.collectAsState()
 
     // 加载隐藏列表（首次访问会触发一次性 HIDE_TYPE 数据分类）
@@ -81,6 +84,18 @@ fun AnimatedVisibilityScope.HideListScreen(navigator: DestinationsNavigator) = S
         2 -> "上传者"
         3 -> "标签"
         else -> "未知"
+    }
+
+    // 同步：拉取服务器条目去重合并进本地，再上传本地全量
+    fun syncWithServer() {
+        launch {
+            val ok = EhDB.syncHideList()
+            if (ok) {
+                hideEntries.clear()
+                hideEntries.addAll(EhDB.getHideList())
+                showSnackbar("隐藏列表同步完成")
+            }
+        }
     }
 
     fun addEntry() {
@@ -184,6 +199,10 @@ fun AnimatedVisibilityScope.HideListScreen(navigator: DestinationsNavigator) = S
                     }
                 },
                 actions = {
+                    // 同步按钮：先拉取合并，再上传本地全量（需 PQ URL 与 API Token）
+                    IconButton(onClick = ::syncWithServer) {
+                        Icon(imageVector = Icons.Default.Sync, contentDescription = "同步隐藏列表")
+                    }
                     IconButton(onClick = {
                         launch {
                             awaitConfirmationOrCancel(showCancelButton = false) {
@@ -203,12 +222,30 @@ fun AnimatedVisibilityScope.HideListScreen(navigator: DestinationsNavigator) = S
             }
         },
     ) { paddingValues ->
+        // 搜索关键字：按类型名或内容本地过滤
+        val query = searchState.text.toString().trim()
+        val filteredEntries = hideEntries.filter { entry ->
+            query.isBlank() ||
+                typeName(entry.hideType).contains(query, ignoreCase = true) ||
+                (entry.keyword ?: entry.name).contains(query, ignoreCase = true)
+        }
         LazyColumn(
             modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
             contentPadding = paddingValues,
         ) {
+            // 顶部搜索框
+            item(key = "search") {
+                OutlinedTextField(
+                    state = searchState,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    placeholder = { Text(text = "搜索类型或内容") },
+                    leadingIcon = { Icon(imageVector = Icons.Default.Search, contentDescription = null) },
+                    lineLimits = TextFieldLineLimits.SingleLine,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Search),
+                )
+            }
             (1..3).forEach { hideType ->
-                val entries = hideEntries.filter { it.hideType == hideType }
+                val entries = filteredEntries.filter { it.hideType == hideType }
                 if (entries.isNotEmpty()) {
                     item(key = "header_$hideType") {
                         Text(
@@ -262,6 +299,24 @@ fun AnimatedVisibilityScope.HideListScreen(navigator: DestinationsNavigator) = S
                             )
                             Text(
                                 text = "暂无隐藏条目",
+                                style = MaterialTheme.typography.headlineMedium,
+                            )
+                        }
+                    } else if (filteredEntries.isEmpty()) {
+                        Column(
+                            modifier = Modifier.padding(paddingValues).fillMaxSize(),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Spacer(modifier = Modifier.size(80.dp))
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = null,
+                                modifier = Modifier.padding(16.dp).size(120.dp),
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                            Text(
+                                text = "无匹配条目",
                                 style = MaterialTheme.typography.headlineMedium,
                             )
                         }

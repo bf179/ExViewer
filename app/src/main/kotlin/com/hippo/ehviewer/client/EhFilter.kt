@@ -4,6 +4,7 @@ import arrow.core.memoize
 import com.hippo.ehviewer.EhDB
 import com.hippo.ehviewer.Settings
 import com.hippo.ehviewer.client.data.GalleryInfo
+import com.hippo.ehviewer.client.data.GalleryInfo.Companion.NOT_FAVORITED
 import com.hippo.ehviewer.dao.Filter
 import com.hippo.ehviewer.dao.FilterMode
 import com.hippo.ehviewer.dao.QuickSearch
@@ -81,72 +82,71 @@ object EhFilter : CoroutineScope {
     //         } ?: false
     //     }
     // }
-    // 复合类型标签组屏蔽_filterCompositeTags
+    // 复合类型标签组屏蔽（新语义：空格分隔 token，逗号兼容；A B=全含 AND，-B=排除；收藏作品跳过）
     suspend fun filterTagGroup(info: GalleryInfo): Boolean {
         // 收藏作品直接跳过过滤
-        if (info.favoriteSlot != -2) return false
+        if (info.favoriteSlot != NOT_FAVORITED) return false
 
         return anyActive(FilterMode.TAG_GROUP) { compositeFilter ->
-            // 用逗号分割复合标签文本
-            val parts = compositeFilter.text.split(',')
+            // 空格分隔 token（逗号兼容视为空格），trim 过滤空 token
+            val tokens = compositeFilter.text
+                .replace(',', ' ')
+                .split(' ')
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
 
-            // 初始化分组
+            // 约束分类：包含（uploader/标题/标签）与排除（- 前缀，去除后可属任意类别）
             val uploaderFilters = mutableListOf<String>()
             val titleFilters = mutableListOf<String>()
-            val blacklistTagFilters = mutableListOf<String>() // 黑名单标签（全部匹配）
-            val whitelistTagFilters = mutableListOf<String>() // 白名单标签（任意匹配则不过滤）
+            val tagFilters = mutableListOf<String>()
+            val excludeUploaderFilters = mutableListOf<String>()
+            val excludeTitleFilters = mutableListOf<String>()
+            val excludeTagFilters = mutableListOf<String>()
 
-            // 分类规则：
-            parts.forEach { part ->
+            tokens.forEach { rawToken ->
+                var token = rawToken
+                // 1. 排除约束：- 前缀（先去掉前缀再分类）
+                val excluded = token.startsWith("-")
+                if (excluded) {
+                    token = token.removePrefix("-").trim()
+                }
+                if (token.isEmpty()) return@forEach
+                // 2. 展开标签缩写（f: → female: 等），再分类
+                token = expandTagAbbreviation(token)
+                // 3. uploader: → 上传者；"..." → 标题；其余 → 标签（matchTag 命名空间感知）
+                val isUploader = token.startsWith("uploader:", ignoreCase = true)
+                val isQuotedTitle = token.length > 1 && token.startsWith("\"") && token.endsWith("\"")
                 when {
-                    // 1. uploader: → 上传者
-                    part.startsWith("uploader:") -> {
-                        uploaderFilters.add(part.removePrefix("uploader:").trim())
-                    }
-                    // 2. 双引号包裹 → 标题组
-                    part.startsWith("\"") && part.endsWith("\"") && part.length > 1 -> {
-                        titleFilters.add(part.substring(1, part.length - 1).trim())
-                    }
-                    // 3. 以 "-" 开头 → 白名单标签
-                    part.startsWith("-") -> {
-                        whitelistTagFilters.add(part.substring(1).lowercase())
-                    }
-                    // 4. 其他 → 黑名单标签
-                    else -> {
-                        blacklistTagFilters.add(part.lowercase())
-                    }
+                    excluded && isUploader -> excludeUploaderFilters.add(token.removePrefix("uploader:").trim().lowercase())
+                    excluded && isQuotedTitle -> excludeTitleFilters.add(token.substring(1, token.length - 1).trim())
+                    excluded -> excludeTagFilters.add(token.lowercase())
+                    isUploader -> uploaderFilters.add(token.removePrefix("uploader:").trim())
+                    isQuotedTitle -> titleFilters.add(token.substring(1, token.length - 1).trim())
+                    else -> tagFilters.add(token.lowercase())
                 }
             }
 
-            // 0. 如果存在白名单标签，且匹配任意一个 → 直接跳过过滤（不屏蔽）
-            val hasWhitelistMatch = whitelistTagFilters.isNotEmpty() &&
-                info.simpleTags?.any { galleryTag ->
-                    whitelistTagFilters.any { whiteTag ->
-                        matchTag(galleryTag.lowercase(), whiteTag)
-                    }
-                } ?: false
-            if (hasWhitelistMatch) return@anyActive false
-
-            // 1. 上传者检测（如果非空，必须全部匹配）
+            // 包含约束：全部满足（AND）
             val isUploaderMatched = uploaderFilters.isEmpty() ||
                 uploaderFilters.all { it.equals(info.uploader, ignoreCase = true) }
-
-            // 2. 标题检测（如果非空，必须全部匹配）
             val isTitleMatched = titleFilters.isEmpty() ||
                 titleFilters.all { info.title.orEmpty().contains(it, ignoreCase = true) }
-
-            // 3. 黑名单标签检测（如果非空，必须全部匹配）
-            val isBlacklistTagMatched = blacklistTagFilters.isEmpty() ||
-                blacklistTagFilters.all { requiredTag ->
-                    info.simpleTags?.any { galleryTag ->
-                        matchTag(galleryTag.lowercase(), requiredTag)
-                    } ?: false
+            val isTagMatched = tagFilters.isEmpty() ||
+                tagFilters.all { requiredTag ->
+                    info.simpleTags?.any { galleryTag -> matchTag(galleryTag.lowercase(), requiredTag) } ?: false
                 }
+            if (!(isUploaderMatched && isTitleMatched && isTagMatched)) return@anyActive false
 
-            // 最终结果：必须同时满足上传者、标题、黑名单标签的条件
-            isUploaderMatched && isTitleMatched && isBlacklistTagMatched
+            // 排除约束：任一命中则整条不命中（A -B = 含 A 且不含 B 时命中）
+            val excludeHit =
+                excludeUploaderFilters.isNotEmpty() && excludeUploaderFilters.any { it == info.uploader?.lowercase() } ||
+                    excludeTitleFilters.isNotEmpty() && excludeTitleFilters.any { info.title.orEmpty().contains(it, ignoreCase = true) } ||
+                    excludeTagFilters.isNotEmpty() && excludeTagFilters.any { excludedTag ->
+                        info.simpleTags?.any { galleryTag -> matchTag(galleryTag.lowercase(), excludedTag) } ?: false
+                    }
+            if (excludeHit) return@anyActive false
+
+            true
         }
     }
 
