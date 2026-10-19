@@ -1,0 +1,319 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt b/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
+index cb69a41c6..a49587d08 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
+@@ -151,6 +151,13 @@ object Settings : DataStorePreferences(null) {
+     var defaultDownloadLabel by stringOrNullPref("default_download_label")
+     var lastUpdateTime by longPref("last_update_time", BuildConfig.COMMIT_TIME)
+ 
++    // 优先队列 / 服务器同步（B5）
++    var pqUrl by stringOrNullPref("pq_url")
++    var apiToken by stringOrNullPref("api_token")
++    var hideFav by boolPref("hide_fav", true)
++    var hidePqTagged by boolPref("hide_pq_tagged", false)
++    var hidePqTaggedInHistory by boolPref("hide_pq_tagged_in_history", false)
++
+     // Reader
+     val cropBorder = boolPref("crop_borders", false)
+     val colorFilter = boolPref("pref_color_filter_key", false)
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/PqApi.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/PqApi.kt
+new file mode 100644
+index 000000000..1e6f021bd
+--- /dev/null
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/PqApi.kt
+@@ -0,0 +1,104 @@
++package com.hippo.ehviewer.client
++
++import android.widget.Toast
++import com.hippo.ehviewer.EhApplication
++import com.hippo.ehviewer.Settings
++import io.ktor.client.call.body
++import io.ktor.client.request.get
++import io.ktor.client.request.header
++import java.net.URLEncoder
++import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.withContext
++import kotlinx.serialization.Serializable
++import kotlinx.serialization.json.Json
++import splitties.init.appCtx
++
++/**
++ * 优先队列（PQ）接口：GET /pq_galleries，Bearer 鉴权。
++ * 兼容纯数组与 {items: [...]} 信封两种响应结构。
++ */
++
++@Serializable
++data class PqGalleryItem(
++    val gid: Long = 0,
++    val token: String = "",
++    val title: String? = null,
++    val thumb: String? = null,
++    val fav_status: Int = 0,
++)
++
++@Serializable
++data class PqGroupItem(
++    val group_content: String = "",
++    val count: Int = 0,
++    val new_count: Int = 0,
++)
++
++@Serializable
++data class PqPage<T>(val items: List<T> = emptyList())
++
++private val pqJson = Json {
++    ignoreUnknownKeys = true
++    coerceInputValues = true
++}
++
++private inline fun <reified T> parsePqItems(body: String): List<T> = try {
++    pqJson.decodeFromString<List<T>>(body)
++} catch (_: Exception) {
++    pqJson.decodeFromString<PqPage<T>>(body).items
++}
++
++private fun buildPqUrl(base: String, section: String, page: Int, pageSize: Int, hideFav: Boolean, group: String?): String {
++    val separator = if (base.contains('?')) '&' else '?'
++    val sb = StringBuilder(base).append(separator)
++        .append("section=").append(section)
++        .append("&page=").append(page)
++        .append("&page_size=").append(pageSize)
++        .append("&hide_fav=").append(if (hideFav) 1 else 0)
++    if (!group.isNullOrBlank()) {
++        sb.append("&group=").append(URLEncoder.encode(group, "UTF-8"))
++    }
++    return sb.toString()
++}
++
++private suspend fun pqToast(message: String) = withContext(Dispatchers.Main) {
++    Toast.makeText(appCtx, message, Toast.LENGTH_SHORT).show()
++}
++
++// 优先队列 GET（Bearer 鉴权）：失败返回 null 并提示
++private suspend fun <T> pqGet(url: String, decode: (String) -> T): T? {
++    val apiToken = Settings.apiToken.value
++    if (apiToken.isBlank()) {
++        pqToast("未配置 API Token，无法请求优先队列")
++        return null
++    }
++    return try {
++        val response = EhApplication.ktorClient.get(url) {
++            header("Authorization", "Bearer $apiToken")
++        }
++        if (response.status.value in 200..299) {
++            decode(response.body<String>())
++        } else {
++            pqToast("优先队列请求失败: ${response.status}")
++            null
++        }
++    } catch (e: CancellationException) {
++        throw e
++    } catch (e: Exception) {
++        pqToast("优先队列请求异常: ${e.message}")
++        null
++    }
++}
++
++// 单画廊段（section=single）
++suspend fun fetchPqSingles(pqUrl: String, page: Int, pageSize: Int, hideFav: Boolean): List<PqGalleryItem>? =
++    pqGet(buildPqUrl(pqUrl, "single", page, pageSize, hideFav, null)) { parsePqItems<PqGalleryItem>(it) }
++
++// 标签组列表（section=group）
++suspend fun fetchPqGroups(pqUrl: String, page: Int, pageSize: Int, hideFav: Boolean): List<PqGroupItem>? =
++    pqGet(buildPqUrl(pqUrl, "group", page, pageSize, hideFav, null)) { parsePqItems<PqGroupItem>(it) }
++
++// 组内画廊（section=group & group=<content>）
++suspend fun fetchPqGroupGalleries(pqUrl: String, group: String, page: Int, pageSize: Int, hideFav: Boolean): List<PqGalleryItem>? =
++    pqGet(buildPqUrl(pqUrl, "group", page, pageSize, hideFav, group)) { parsePqItems<PqGalleryItem>(it) }
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/SettingsScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/SettingsScreen.kt
+index d94aa7fbf..beaa929e5 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/SettingsScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/SettingsScreen.kt
+@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.Adb
+ import androidx.compose.material.icons.filled.Download
+ import androidx.compose.material.icons.filled.Info
+ import androidx.compose.material.icons.filled.Security
++import androidx.compose.material.icons.filled.Sync
+ import androidx.compose.material3.Scaffold
+ import androidx.compose.material3.Text
+ import androidx.compose.material3.TopAppBar
+@@ -25,6 +26,7 @@ import com.hippo.ehviewer.ui.destinations.AdvancedScreenDestination
+ import com.hippo.ehviewer.ui.destinations.DownloadScreenDestination
+ import com.hippo.ehviewer.ui.destinations.EhScreenDestination
+ import com.hippo.ehviewer.ui.destinations.PrivacyScreenDestination
++import com.hippo.ehviewer.ui.destinations.SyncHideScreenDestination
+ import com.hippo.ehviewer.ui.main.NavigationIcon
+ import com.ramcosta.composedestinations.annotation.Destination
+ import com.ramcosta.composedestinations.annotation.RootGraph
+@@ -74,6 +76,12 @@ fun AnimatedVisibilityScope.SettingsScreen(navigator: DestinationsNavigator) = S
+                 childRoute = AboutScreenDestination,
+                 navigator = navigator,
+             )
++            PreferenceHeader(
++                icon = Icons.Default.Sync,
++                title = R.string.sync_and_hide,
++                childRoute = SyncHideScreenDestination,
++                navigator = navigator,
++            )
+         }
+     }
+ }
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/SyncHideScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/SyncHideScreen.kt
+new file mode 100644
+index 000000000..ef5a5f56f
+--- /dev/null
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/SyncHideScreen.kt
+@@ -0,0 +1,104 @@
++package com.hippo.ehviewer.ui.settings
++
++import androidx.compose.animation.AnimatedVisibilityScope
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.rememberScrollState
++import androidx.compose.foundation.verticalScroll
++import androidx.compose.material3.Scaffold
++import androidx.compose.material3.Text
++import androidx.compose.material3.TopAppBar
++import androidx.compose.material3.TopAppBarDefaults
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.rememberCoroutineScope
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.input.nestedscroll.nestedScroll
++import androidx.compose.ui.res.stringResource
++import com.ehviewer.core.i18n.R
++import com.hippo.ehviewer.Settings
++import com.hippo.ehviewer.asMutableState
++import com.hippo.ehviewer.collectAsState
++import com.hippo.ehviewer.ui.Screen
++import com.hippo.ehviewer.ui.destinations.HideListScreenDestination
++import com.hippo.ehviewer.ui.main.NavigationIcon
++import com.hippo.ehviewer.ui.tools.awaitInputText
++import com.ramcosta.composedestinations.annotation.Destination
++import com.ramcosta.composedestinations.annotation.RootGraph
++import com.ramcosta.composedestinations.navigation.DestinationsNavigator
++import kotlinx.coroutines.launch
++import me.zhanghai.compose.preference.Preference
++import me.zhanghai.compose.preference.SwitchPreference
++
++/**
++ * 同步与隐藏设置：优先队列地址 / API Token / 隐藏开关 / 隐藏列表入口。
++ * 与旧版「同步与隐藏过滤」页对应（B5）。
++ */
++@Destination<RootGraph>
++@Composable
++fun AnimatedVisibilityScope.SyncHideScreen(navigator: DestinationsNavigator) = Screen(navigator) {
++    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
++    val coroutineScope = rememberCoroutineScope()
++    val pqUrl by Settings.pqUrl.collectAsState()
++    val apiToken by Settings.apiToken.collectAsState()
++
++    val pqTitle = "优先队列地址 (PQ URL)"
++    val pqHint = "https://api.example.com/pq_galleries"
++    val tokenTitle = "API Token"
++    val tokenHint = "与服务器 server.api_token 保持一致"
++
++    Scaffold(
++        topBar = {
++            TopAppBar(
++                title = { Text(text = stringResource(R.string.sync_and_hide)) },
++                navigationIcon = { NavigationIcon() },
++                scrollBehavior = scrollBehavior,
++            )
++        },
++    ) { paddingValues ->
++        Column(
++            modifier = Modifier
++                .nestedScroll(scrollBehavior.nestedScrollConnection)
++                .verticalScroll(rememberScrollState())
++                .padding(paddingValues),
++        ) {
++            Preference(
++                title = pqTitle,
++                summary = pqUrl ?: "未设置",
++            ) {
++                coroutineScope.launch {
++                    val input = awaitInputText(initial = pqUrl.orEmpty(), title = pqTitle, hint = pqHint)
++                    Settings.pqUrl.value = input.trim().ifBlank { null }
++                }
++            }
++            Preference(
++                title = tokenTitle,
++                summary = apiToken?.let { "已配置 (${it.take(4)}…)" } ?: "未设置",
++            ) {
++                coroutineScope.launch {
++                    val input = awaitInputText(initial = apiToken.orEmpty(), title = tokenTitle, hint = tokenHint)
++                    Settings.apiToken.value = input.trim().ifBlank { null }
++                }
++            }
++            SwitchPreference(
++                title = "隐藏已收藏画廊",
++                summary = "优先队列 / 列表中不显示已收藏项（本地库双查）",
++                state = Settings.hideFav.asMutableState(),
++            )
++            SwitchPreference(
++                title = "隐藏优先队列标签画廊",
++                summary = "搜索 / 热门 / 排行中隐藏命中优先队列标签的画廊",
++                state = Settings.hidePqTagged.asMutableState(),
++            )
++            SwitchPreference(
++                title = "历史页隐藏优先队列标签画廊",
++                summary = "历史记录页独立控制，不随上一项",
++                state = Settings.hidePqTaggedInHistory.asMutableState(),
++            )
++            Preference(
++                title = "隐藏列表管理",
++                summary = "管理标题 / 上传者 / 标签三类隐藏条目",
++            ) { navigator.navigate(HideListScreenDestination) }
++        }
++    }
++}
+diff --git a/core/i18n/src/commonMain/moko-resources/base/strings.xml b/core/i18n/src/commonMain/moko-resources/base/strings.xml
+index d134586e4..3d8d48b56 100644
+--- a/core/i18n/src/commonMain/moko-resources/base/strings.xml
++++ b/core/i18n/src/commonMain/moko-resources/base/strings.xml
+@@ -393,6 +393,7 @@
+     <string name="settings_advanced_backup_favorite_success">Backup favorite list success</string>
+     <string name="settings_advanced_backup_favorite_failed">Backup favorite list failed</string>
+     <string name="settings_about">About</string>
++    <string name="sync_and_hide">Sync &amp; hide</string>
+     <string name="settings_about_declaration" translatable="false">EhViewer</string>
+     <string name="settings_about_declaration_summary">EhViewer is not affiliated with E-Hentai.org in any way</string>
+     <string name="settings_about_author">Author</string>
+diff --git a/core/i18n/src/commonMain/moko-resources/zh-rCN/strings.xml b/core/i18n/src/commonMain/moko-resources/zh-rCN/strings.xml
+index 6244d7eb7..4cc79e818 100644
+--- a/core/i18n/src/commonMain/moko-resources/zh-rCN/strings.xml
++++ b/core/i18n/src/commonMain/moko-resources/zh-rCN/strings.xml
+@@ -374,6 +374,7 @@
+     <string name="settings_advanced_backup_favorite_success">备份收藏列表成功</string>
+     <string name="settings_advanced_backup_favorite_failed">备份收藏列表失败</string>
+     <string name="settings_about">关于</string>
++    <string name="sync_and_hide">同步与隐藏</string>
+     <string name="settings_about_declaration_summary">EhViewer 与 E-Hentai.org 无任何联系</string>
+     <string name="settings_about_author">作者</string>
+     <string name="settings_about_latest_release">最新版本</string>
+diff --git a/core/i18n/src/commonMain/moko-resources/zh-rHK/strings.xml b/core/i18n/src/commonMain/moko-resources/zh-rHK/strings.xml
+index 2a2649371..bf46729bd 100644
+--- a/core/i18n/src/commonMain/moko-resources/zh-rHK/strings.xml
++++ b/core/i18n/src/commonMain/moko-resources/zh-rHK/strings.xml
+@@ -356,6 +356,7 @@
+     <string name="settings_advanced_import_data_successfully">導入數據成功</string>
+ 
+     <string name="settings_about">關於</string>
++    <string name="sync_and_hide">同步與隱藏</string>
+     <string name="settings_about_declaration_summary">EhViewer 與 E-Hentai.org 無任何聯繫</string>
+     <string name="settings_about_author">作者</string>
+     <string name="settings_about_latest_release">最新版本</string>
+diff --git a/core/i18n/src/commonMain/moko-resources/zh-rTW/strings.xml b/core/i18n/src/commonMain/moko-resources/zh-rTW/strings.xml
+index b2011a24e..544fff625 100644
+--- a/core/i18n/src/commonMain/moko-resources/zh-rTW/strings.xml
++++ b/core/i18n/src/commonMain/moko-resources/zh-rTW/strings.xml
+@@ -364,6 +364,7 @@
+     <string name="settings_advanced_backup_favorite_success">備份收藏列表成功</string>
+     <string name="settings_advanced_backup_favorite_failed">備份收藏列表失敗</string>
+     <string name="settings_about">關於</string>
++    <string name="sync_and_hide">同步與隱藏</string>
+     <string name="settings_about_declaration_summary">EhViewer 與 E-Hentai.org 無任何關聯</string>
+     <string name="settings_about_author">作者</string>
+     <string name="settings_about_latest_release">最新版本</string>
