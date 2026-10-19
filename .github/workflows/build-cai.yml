@@ -22,18 +22,20 @@ jobs:
           distribution: temurin
           java-version-file: EhViewer/.java-version   # 基线与上游一致（当前 25）
 
-      - name: Install Rust Android targets
-        run: |
-          rustup show
-          rustup target add aarch64-linux-android armv7-linux-androideabi \
-            thumbv7neon-linux-androideabi x86_64-linux-android i686-linux-android
-
       - name: Bump submodule to Codeberg HEAD
         run: |
           cd EhViewer
           git fetch --depth 1 origin main
           git checkout FETCH_HEAD
           git log -1 --oneline
+
+      - name: Install Rust (pinned toolchain) + Android targets
+        working-directory: EhViewer
+        run: |
+          cat rust-toolchain.toml
+          rustup show
+          rustup target add aarch64-linux-android armv7-linux-androideabi \
+            thumbv7neon-linux-androideabi x86_64-linux-android
 
       - name: Prepare tree (my patches only, no direct-connect)
         run: bash scripts/prepare-build.sh cai
