@@ -161,7 +161,7 @@ index 64d408c90..a2b5076be 100644
  suspend fun showRestartDialog() {
      awaitConfirmationOrCancel {
 diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
-index 35354a7b3..0f909d8ba 100644
+index 35354a7b3..87b45dae0 100644
 --- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
 +++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
 @@ -14,6 +14,11 @@ import androidx.compose.foundation.layout.fillMaxSize
@@ -221,7 +221,7 @@ index 35354a7b3..0f909d8ba 100644
 +    var batchTask by remember { mutableStateOf<BatchFavTask?>(null) }
 +    LaunchedEffect(Unit) {
 +        while (true) {
-+            batchTask = EhDB.batchFavTaskDao().getLatest()
++            batchTask = EhDB.batchFavTaskDao().latest()
 +            delay(1000)
 +        }
 +    }
