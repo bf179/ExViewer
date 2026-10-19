@@ -1,5 +1,37 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt b/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt
+index 122ec85ed..5544593d5 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt
+@@ -22,6 +22,9 @@ import arrow.fx.coroutines.resourceScope
+ import com.ehviewer.core.data.model.asEntity
+ import com.ehviewer.core.database.EhDatabase
+ import com.ehviewer.core.database.Schema17to18
++import com.ehviewer.core.database.Schema23to24
++import com.ehviewer.core.database.Schema24to25
++import com.ehviewer.core.database.Schema25to26
+ import com.ehviewer.core.database.getDatabasePath
+ import com.ehviewer.core.database.model.DownloadArtist
+ import com.ehviewer.core.database.model.DownloadDirname
+@@ -44,7 +47,7 @@ import okio.Path
+ object EhDB {
+     private const val DB_NAME = "eh.db"
+     private val db = roomDb<EhDatabase>(DB_NAME) {
+-        addMigrations(Schema17to18())
++        addMigrations(Schema17to18(), Schema23to24(), Schema24to25(), Schema25to26())
+     }
+ 
+     suspend fun putGalleryInfo(galleryInfo: GalleryEntity) {
+@@ -293,7 +296,7 @@ object EhDB {
+         file sendTo dbFile
+         val oldDB = resource {
+             roomDb<EhDatabase>(tempDBName) {
+-                addMigrations(Schema17to18())
++                addMigrations(Schema17to18(), Schema23to24(), Schema24to25(), Schema25to26())
+             }
+         } release { db ->
+             db.close()
 diff --git a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/Database.kt b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/Database.kt
-index 3783f34d0..01d09b329 100644
+index 3783f34d0..691c0f65f 100644
 --- a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/Database.kt
 +++ b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/Database.kt
 @@ -4,6 +4,7 @@ import androidx.room.AutoMigration
@@ -44,18 +76,7 @@ index 3783f34d0..01d09b329 100644
      exportSchema = true,
      autoMigrations = [
          AutoMigration(from = 4, to = 5, spec = Schema4to5::class),
-@@ -56,6 +63,10 @@ import com.ehviewer.core.database.model.Search
-         AutoMigration(from = 20, to = 21, spec = Schema20to21::class),
-         AutoMigration(from = 21, to = 22, spec = Schema21to22::class),
-         AutoMigration(from = 22, to = 23),
-+        // v24: 离线同步队列；v25: 批量收藏任务；v26: 优先队列标签 + 隐藏类型
-+        AutoMigration(from = 23, to = 24),
-+        AutoMigration(from = 24, to = 25),
-+        AutoMigration(from = 25, to = 26),
-     ],
- )
- @TypeConverters(FilterModeConverter::class)
-@@ -70,6 +81,9 @@ abstract class EhDatabase : RoomDatabase() {
+@@ -70,6 +77,9 @@ abstract class EhDatabase : RoomDatabase() {
      abstract fun localFavoritesDao(): LocalFavoritesDao
      abstract fun progressDao(): ProgressDao
      abstract fun quickSearchDao(): QuickSearchDao
@@ -65,6 +86,52 @@ index 3783f34d0..01d09b329 100644
  }
  
  @Database(
+diff --git a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/DatabaseMigrations.kt b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/DatabaseMigrations.kt
+index d4cbf74c5..a6b0c8fd1 100644
+--- a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/DatabaseMigrations.kt
++++ b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/DatabaseMigrations.kt
+@@ -126,3 +126,41 @@ class Schema20to21 : AutoMigrationSpec {
+ // Virtual tables can't be altered, so we use rename to recreate it
+ @RenameTable(fromTableName = "GalleryFts", toTableName = "GALLERIES_FTS")
+ class Schema21to22 : AutoMigrationSpec
++
++// ---- v24 ~ v26：自有功能扩展（显式迁移，避免 AutoMigration 依赖中间版本 schema JSON）----
++
++/** v24：离线同步队列 */
++class Schema23to24 : Migration(23, 24) {
++    override fun migrate(connection: SQLiteConnection) {
++        connection.execSQL(
++            "CREATE TABLE IF NOT EXISTS `sync_outbox` (" +
++                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
++                "`api` TEXT NOT NULL, " +
++                "`payload` TEXT NOT NULL, " +
++                "`createdAt` INTEGER NOT NULL)",
++        )
++    }
++}
++
++/** v25：批量收藏任务进度 */
++class Schema24to25 : Migration(24, 25) {
++    override fun migrate(connection: SQLiteConnection) {
++        connection.execSQL(
++            "CREATE TABLE IF NOT EXISTS `batch_fav_tasks` (" +
++                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
++                "`status` TEXT NOT NULL, " +
++                "`total` INTEGER NOT NULL, " +
++                "`done` INTEGER NOT NULL, " +
++                "`createdAt` INTEGER NOT NULL, " +
++                "`updatedAt` INTEGER NOT NULL)",
++        )
++    }
++}
++
++/** v26：优先队列标签缓存 + 快速搜索隐藏类型 */
++class Schema25to26 : Migration(25, 26) {
++    override fun migrate(connection: SQLiteConnection) {
++        connection.execSQL("CREATE TABLE IF NOT EXISTS `pq_tag` (`tag` TEXT NOT NULL, PRIMARY KEY(`tag`))")
++        connection.execSQL("ALTER TABLE `QUICK_SEARCH` ADD COLUMN `HIDE_TYPE` INTEGER NOT NULL DEFAULT 0")
++    }
++}
 diff --git a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/dao/BatchFavTaskDao.kt b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/dao/BatchFavTaskDao.kt
 new file mode 100644
 index 000000000..d1b803ed1
