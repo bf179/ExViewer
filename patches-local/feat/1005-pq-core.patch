@@ -1,17 +1,17 @@
 diff --git a/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt b/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
-index cb69a41c6..a49587d08 100644
+index cb69a41c6..ac6b751b0 100644
 --- a/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
 +++ b/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
 @@ -151,6 +151,13 @@ object Settings : DataStorePreferences(null) {
      var defaultDownloadLabel by stringOrNullPref("default_download_label")
      var lastUpdateTime by longPref("last_update_time", BuildConfig.COMMIT_TIME)
  
-+    // 优先队列 / 服务器同步（B5）
-+    var pqUrl by stringOrNullPref("pq_url")
-+    var apiToken by stringOrNullPref("api_token")
-+    var hideFav by boolPref("hide_fav", true)
-+    var hidePqTagged by boolPref("hide_pq_tagged", false)
-+    var hidePqTaggedInHistory by boolPref("hide_pq_tagged_in_history", false)
++    // 优先队列 / 服务器同步（B5）：用 val 持有委托对象，便于 .value / asMutableState()
++    val pqUrl = stringOrNullPref("pq_url")
++    val apiToken = stringOrNullPref("api_token")
++    val hideFav = boolPref("hide_fav", true)
++    val hidePqTagged = boolPref("hide_pq_tagged", false)
++    val hidePqTaggedInHistory = boolPref("hide_pq_tagged_in_history", false)
 +
      // Reader
      val cropBorder = boolPref("crop_borders", false)
@@ -127,7 +127,7 @@ index 000000000..1e6f021bd
 +suspend fun fetchPqGroupGalleries(pqUrl: String, group: String, page: Int, pageSize: Int, hideFav: Boolean): List<PqGalleryItem>? =
 +    pqGet(buildPqUrl(pqUrl, "group", page, pageSize, hideFav, group)) { parsePqItems<PqGalleryItem>(it) }
 diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/EhScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/EhScreen.kt
-index 8a7b29ced..6cca8a285 100644
+index 0182348f0..6694b689f 100644
 --- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/EhScreen.kt
 +++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/EhScreen.kt
 @@ -39,6 +39,7 @@ import com.hippo.ehviewer.client.EhUtils
