@@ -11,7 +11,7 @@ index 122ec85ed..e1ff043e8 100644
 +    fun batchFavTaskDao() = db.batchFavTaskDao()
  }
 diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt
-index f0b28cce8..26700e6c0 100644
+index 64d408c90..a2b5076be 100644
 --- a/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt
 +++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt
 @@ -17,6 +17,7 @@ package com.hippo.ehviewer.ui
@@ -161,7 +161,7 @@ index f0b28cce8..26700e6c0 100644
  suspend fun showRestartDialog() {
      awaitConfirmationOrCancel {
 diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
-index 20598d225..b2dfccfd2 100644
+index 35354a7b3..0f909d8ba 100644
 --- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
 +++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
 @@ -14,6 +14,11 @@ import androidx.compose.foundation.layout.fillMaxSize
@@ -176,7 +176,12 @@ index 20598d225..b2dfccfd2 100644
  import androidx.compose.foundation.layout.systemBars
  import androidx.compose.foundation.lazy.grid.rememberLazyGridState
  import androidx.compose.foundation.lazy.itemsIndexed
-@@ -30,6 +35,10 @@ import androidx.compose.material.icons.filled.Reorder
+@@ -26,10 +31,15 @@ import androidx.compose.material.icons.automirrored.filled.Help
+ import androidx.compose.material.icons.automirrored.filled.LastPage
+ import androidx.compose.material.icons.filled.Add
+ import androidx.compose.material.icons.filled.Refresh
++import androidx.compose.material.icons.filled.PlaylistAdd
+ import androidx.compose.material.icons.filled.Reorder
  import androidx.compose.material.icons.filled.Shuffle
  import androidx.compose.material.icons.outlined.Bookmarks
  import androidx.compose.material3.CardDefaults
@@ -187,7 +192,7 @@ index 20598d225..b2dfccfd2 100644
  import androidx.compose.material3.Icon
  import androidx.compose.material3.IconButton
  import androidx.compose.material3.IconButtonDefaults
-@@ -69,6 +78,7 @@ import androidx.paging.LoadState
+@@ -69,6 +79,7 @@ import androidx.paging.LoadState
  import androidx.paging.compose.collectAsLazyPagingItems
  import arrow.core.raise.ensure
  import arrow.core.raise.ensureNotNull
@@ -195,7 +200,7 @@ index 20598d225..b2dfccfd2 100644
  import com.ehviewer.core.database.model.QuickSearch
  import com.ehviewer.core.i18n.R
  import com.ehviewer.core.ui.component.FAB_ANIMATE_TIME
-@@ -104,6 +114,12 @@ import com.hippo.ehviewer.client.parser.GalleryDetailUrlParser
+@@ -104,6 +115,12 @@ import com.hippo.ehviewer.client.parser.GalleryDetailUrlParser
  import com.hippo.ehviewer.client.parser.GalleryPageUrlParser
  import com.hippo.ehviewer.collectAsState
  import com.hippo.ehviewer.ui.DrawerHandle
@@ -208,7 +213,7 @@ index 20598d225..b2dfccfd2 100644
  import com.hippo.ehviewer.ui.Screen
  import com.hippo.ehviewer.ui.awaitSelectDate
  import com.hippo.ehviewer.ui.destinations.ProgressScreenDestination
-@@ -470,6 +486,15 @@ fun AnimatedVisibilityScope.GalleryListScreen(
+@@ -472,6 +489,15 @@ fun AnimatedVisibilityScope.GalleryListScreen(
          }
      }
  
@@ -224,7 +229,26 @@ index 20598d225..b2dfccfd2 100644
      SearchBarScreen(
          onApplySearch = ::onApplySearch,
          expanded = searchBarExpanded,
-@@ -526,6 +551,7 @@ fun AnimatedVisibilityScope.GalleryListScreen(
+@@ -496,6 +522,18 @@ fun AnimatedVisibilityScope.GalleryListScreen(
+             IconButton(onClick = { launch { sheetState.open() } }, shapes = IconButtonDefaults.shapes()) {
+                 Icon(imageVector = Icons.Outlined.Bookmarks, contentDescription = stringResource(id = R.string.quick_search))
+             }
++            IconButton(
++                onClick = {
++                    if (BatchFavController.job?.isActive == true) {
++                        cancelBatchFav()
++                    } else {
++                        startBatchFav(data.itemSnapshotList.items.toList())
++                    }
++                },
++                shapes = IconButtonDefaults.shapes(),
++            ) {
++                Icon(imageVector = Icons.Default.PlaylistAdd, contentDescription = "批量收藏")
++            }
+             AvatarIcon()
+         },
+         filter = {
+@@ -528,6 +566,7 @@ fun AnimatedVisibilityScope.GalleryListScreen(
                  }
              }
          }
@@ -232,7 +256,7 @@ index 20598d225..b2dfccfd2 100644
          GalleryList(
              data = data,
              contentModifier = Modifier.nestedScroll(searchBarConnection),
-@@ -559,6 +585,20 @@ fun AnimatedVisibilityScope.GalleryListScreen(
+@@ -561,6 +600,20 @@ fun AnimatedVisibilityScope.GalleryListScreen(
              },
              onLoading = { searchBarOffsetY = 0 },
          )
@@ -253,21 +277,7 @@ index 20598d225..b2dfccfd2 100644
      }
  
      val gotoTitle = stringResource(R.string.go_to)
-@@ -580,6 +620,13 @@ fun AnimatedVisibilityScope.GalleryListScreen(
-         onExpandChanged = { fabExpanded = it },
-         autoCancel = true,
-     ) {
-+        onClick(Icons.Outlined.Bookmarks) {
-+            if (BatchFavController.job?.isActive == true) {
-+                cancelBatchFav()
-+            } else {
-+                startBatchFav(data.itemSnapshotList.items.toList())
-+            }
-+        }
-         if (urlBuilder.mode in [MODE_NORMAL, MODE_UPLOADER, MODE_TAG]) {
-             onClick(Icons.Default.Shuffle) {
-                 urlBuilder.setRange(Random.nextInt(100))
-@@ -660,3 +707,45 @@ private fun getSuitableTitleForUrlBuilder(urlBuilder: ListUrlBuilder, appName: B
+@@ -662,3 +715,45 @@ private fun getSuitableTitleForUrlBuilder(urlBuilder: ListUrlBuilder, appName: B
          null
      }
  }
