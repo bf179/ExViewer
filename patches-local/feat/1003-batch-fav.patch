@@ -1,0 +1,315 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt b/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt
+index 122ec85ed..e1ff043e8 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt
+@@ -335,4 +335,7 @@ object EhDB {
+             addFilter(it)
+         }
+     }
++
++    // 批量收藏任务（B4）：进度持久化，断点续跑
++    fun batchFavTaskDao() = db.batchFavTaskDao()
+ }
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt
+index f0b28cce8..26700e6c0 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt
+@@ -17,6 +17,7 @@ package com.hippo.ehviewer.ui
+ 
+ import android.Manifest
+ import android.content.Context
++import android.widget.Toast
+ import androidx.compose.foundation.layout.Column
+ import androidx.compose.foundation.layout.Spacer
+ import androidx.compose.foundation.layout.fillMaxWidth
+@@ -35,6 +36,7 @@ import androidx.compose.material3.Text
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.res.stringResource
+ import androidx.compose.ui.unit.dp
++import com.ehviewer.core.database.model.BatchFavTask
+ import com.ehviewer.core.database.model.DownloadInfo
+ import com.ehviewer.core.files.delete
+ import com.ehviewer.core.files.exists
+@@ -76,9 +78,20 @@ import com.hippo.ehviewer.util.bgWork
+ import com.hippo.ehviewer.util.requestPermission
+ import com.hippo.ehviewer.util.restartApplication
+ import com.ramcosta.composedestinations.navigation.DestinationsNavigator
++import kotlin.coroutines.cancellation.CancellationException
+ import kotlin.time.Clock
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.NonCancellable
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.currentCoroutineContext
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.ensureActive
++import kotlinx.coroutines.launch
+ import kotlinx.coroutines.sync.Mutex
+ import kotlinx.coroutines.sync.withLock
++import kotlinx.coroutines.withContext
+ import kotlinx.datetime.DateTimeUnit
+ import kotlinx.datetime.LocalDate
+ import kotlinx.datetime.TimeZone
+@@ -429,6 +442,108 @@ suspend fun awaitSelectDate(): String {
+     return dateMillis.toLocalDateTime().date.toString()
+ }
+ 
++// ===== 批量收藏（B4）：app 级后台执行 + Room 进度持久化 =====
++
++const val BATCH_STATUS_RUNNING = "运行中"
++const val BATCH_STATUS_DONE = "完成"
++const val BATCH_STATUS_FAILED = "失败"
++const val BATCH_STATUS_INTERRUPTED = "中断"
++
++// app 级作用域：离开列表页 / 切页都不中断
++private val batchFavScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
++
++object BatchFavController {
++    @Volatile
++    var job: Job? = null
++}
++
++private suspend fun batchToast(msg: String) = withContext(Dispatchers.Main) {
++    Toast.makeText(appCtx, msg, Toast.LENGTH_SHORT).show()
++}
++
++// 批量逐项收藏：只做「添加」语义，已收藏判定由调用方完成
++suspend fun batchModifyFavorite(galleryInfo: BaseGalleryInfo) {
++    val localFavorited = EhDB.containLocalFavorites(galleryInfo.gid)
++    val slot = if (!Settings.hasSignedIn.value) {
++        LOCAL_FAVORITED
++    } else {
++        val defaultFavSlot = Settings.defaultFavSlot.value
++        // 批量场景不弹「每次询问」对话框，回退到本地收藏
++        if (defaultFavSlot == -2) LOCAL_FAVORITED else defaultFavSlot
++    }
++    doModifyFavorites(galleryInfo, slot, localFavorited)
++}
++
++fun startBatchFav(items: List<BaseGalleryInfo>) {
++    if (BatchFavController.job?.isActive == true) return
++    BatchFavController.job = batchFavScope.launch {
++        val dao = EhDB.batchFavTaskDao()
++        val now = System.currentTimeMillis()
++        val id = dao.insert(
++            BatchFavTask(status = BATCH_STATUS_RUNNING, total = items.size, done = 0, createdAt = now, updatedAt = now),
++        )
++        runBatchFavLoop(items, id, items.size, now)
++    }
++}
++
++// 续跑：重置进度重新执行，已收藏者跳过并计入成功（不会重复收藏/误删）
++fun resumeBatchFav(items: List<BaseGalleryInfo>, task: BatchFavTask) {
++    if (BatchFavController.job?.isActive == true) return
++    BatchFavController.job = batchFavScope.launch {
++        val dao = EhDB.batchFavTaskDao()
++        dao.update(task.copy(status = BATCH_STATUS_RUNNING, done = 0, updatedAt = System.currentTimeMillis()))
++        runBatchFavLoop(items, task.id, task.total, task.createdAt)
++    }
++}
++
++// 手动中止：只取消剩余部分，已处理进度保留供续跑
++fun cancelBatchFav() {
++    BatchFavController.job?.cancel(CancellationException("手动中止"))
++}
++
++private suspend fun runBatchFavLoop(items: List<BaseGalleryInfo>, taskId: Long, total: Int, createdAt: Long) {
++    val dao = EhDB.batchFavTaskDao()
++    val slowFav = Settings.defaultFavSlot.value != -1
++    var successCount = 0
++    // 取消后 Room suspend 写入会立刻抛 CancellationException，用 NonCancellable 保证进度落盘
++    suspend fun updateTask(status: String, done: Int) = withContext(NonCancellable) {
++        dao.update(
++            BatchFavTask(
++                id = taskId,
++                status = status,
++                total = total,
++                done = done,
++                createdAt = createdAt,
++                updatedAt = System.currentTimeMillis(),
++            ),
++        )
++    }
++    try {
++        items.forEach { galleryInfo ->
++            currentCoroutineContext().ensureActive()
++            // 已收藏判定：实时 favoriteSlot + 本地库双查，避免误删
++            val isFavorited = galleryInfo.favoriteSlot != NOT_FAVORITED || EhDB.containLocalFavorites(galleryInfo.gid)
++            if (!isFavorited) {
++                runSuspendCatching { batchModifyFavorite(galleryInfo) }.onSuccess { successCount++ }
++                if (slowFav) delay(4000)
++                delay(100)
++            } else {
++                successCount++
++            }
++            updateTask(BATCH_STATUS_RUNNING, successCount)
++        }
++        updateTask(BATCH_STATUS_DONE, successCount)
++        batchToast("成功收藏 $successCount/$total 个画廊")
++    } catch (e: CancellationException) {
++        updateTask(BATCH_STATUS_INTERRUPTED, successCount)
++        batchToast("任务中止，已处理收藏 $successCount 个画廊")
++        throw e
++    } catch (e: Exception) {
++        updateTask(BATCH_STATUS_FAILED, successCount)
++        batchToast("批量收藏失败: ${e.message}")
++    }
++}
++
+ context(_: Context, _: DialogState)
+ suspend fun showRestartDialog() {
+     awaitConfirmationOrCancel {
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
+index 20598d225..b2dfccfd2 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
+@@ -14,6 +14,11 @@ import androidx.compose.foundation.layout.fillMaxSize
+ import androidx.compose.foundation.layout.height
+ import androidx.compose.foundation.layout.only
+ import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.Spacer
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.width
++import androidx.compose.foundation.shape.RoundedCornerShape
+ import androidx.compose.foundation.layout.systemBars
+ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+ import androidx.compose.foundation.lazy.itemsIndexed
+@@ -30,6 +35,10 @@ import androidx.compose.material.icons.filled.Reorder
+ import androidx.compose.material.icons.filled.Shuffle
+ import androidx.compose.material.icons.outlined.Bookmarks
+ import androidx.compose.material3.CardDefaults
++import androidx.compose.material3.LinearProgressIndicator
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Surface
++import androidx.compose.material3.TextButton
+ import androidx.compose.material3.Icon
+ import androidx.compose.material3.IconButton
+ import androidx.compose.material3.IconButtonDefaults
+@@ -69,6 +78,7 @@ import androidx.paging.LoadState
+ import androidx.paging.compose.collectAsLazyPagingItems
+ import arrow.core.raise.ensure
+ import arrow.core.raise.ensureNotNull
++import com.ehviewer.core.database.model.BatchFavTask
+ import com.ehviewer.core.database.model.QuickSearch
+ import com.ehviewer.core.i18n.R
+ import com.ehviewer.core.ui.component.FAB_ANIMATE_TIME
+@@ -104,6 +114,12 @@ import com.hippo.ehviewer.client.parser.GalleryDetailUrlParser
+ import com.hippo.ehviewer.client.parser.GalleryPageUrlParser
+ import com.hippo.ehviewer.collectAsState
+ import com.hippo.ehviewer.ui.DrawerHandle
++import com.hippo.ehviewer.ui.BATCH_STATUS_INTERRUPTED
++import com.hippo.ehviewer.ui.BATCH_STATUS_RUNNING
++import com.hippo.ehviewer.ui.BatchFavController
++import com.hippo.ehviewer.ui.cancelBatchFav
++import com.hippo.ehviewer.ui.resumeBatchFav
++import com.hippo.ehviewer.ui.startBatchFav
+ import com.hippo.ehviewer.ui.Screen
+ import com.hippo.ehviewer.ui.awaitSelectDate
+ import com.hippo.ehviewer.ui.destinations.ProgressScreenDestination
+@@ -470,6 +486,15 @@ fun AnimatedVisibilityScope.GalleryListScreen(
+         }
+     }
+ 
++    // 批量收藏任务进度（Room 持久化，1s 轮询）：驱动横幅与断点续跑
++    var batchTask by remember { mutableStateOf<BatchFavTask?>(null) }
++    LaunchedEffect(Unit) {
++        while (true) {
++            batchTask = EhDB.batchFavTaskDao().getLatest()
++            delay(1000)
++        }
++    }
++
+     SearchBarScreen(
+         onApplySearch = ::onApplySearch,
+         expanded = searchBarExpanded,
+@@ -526,6 +551,7 @@ fun AnimatedVisibilityScope.GalleryListScreen(
+                 }
+             }
+         }
++        Box(modifier = Modifier.fillMaxSize()) {
+         GalleryList(
+             data = data,
+             contentModifier = Modifier.nestedScroll(searchBarConnection),
+@@ -559,6 +585,20 @@ fun AnimatedVisibilityScope.GalleryListScreen(
+             },
+             onLoading = { searchBarOffsetY = 0 },
+         )
++        // 批量收藏进度横幅：覆盖在列表顶部，不改变列表布局
++        val activeTask = batchTask
++        if (activeTask != null && activeTask.status in setOf(BATCH_STATUS_RUNNING, BATCH_STATUS_INTERRUPTED)) {
++            BatchFavBanner(
++                task = activeTask,
++                running = BatchFavController.job?.isActive == true,
++                onCancel = { cancelBatchFav() },
++                onResume = { resumeBatchFav(data.itemSnapshotList.items.toList(), activeTask) },
++                modifier = Modifier
++                    .align(Alignment.TopCenter)
++                    .padding(top = contentPadding.calculateTopPadding() + 8.dp),
++            )
++        }
++        }
+     }
+ 
+     val gotoTitle = stringResource(R.string.go_to)
+@@ -580,6 +620,13 @@ fun AnimatedVisibilityScope.GalleryListScreen(
+         onExpandChanged = { fabExpanded = it },
+         autoCancel = true,
+     ) {
++        onClick(Icons.Outlined.Bookmarks) {
++            if (BatchFavController.job?.isActive == true) {
++                cancelBatchFav()
++            } else {
++                startBatchFav(data.itemSnapshotList.items.toList())
++            }
++        }
+         if (urlBuilder.mode in [MODE_NORMAL, MODE_UPLOADER, MODE_TAG]) {
+             onClick(Icons.Default.Shuffle) {
+                 urlBuilder.setRange(Random.nextInt(100))
+@@ -660,3 +707,45 @@ private fun getSuitableTitleForUrlBuilder(urlBuilder: ListUrlBuilder, appName: B
+         null
+     }
+ }
++
++    // 批量收藏进度横幅：运行中可中止，中断后可续跑
++    @Composable
++    private fun BatchFavBanner(
++        task: BatchFavTask,
++        running: Boolean,
++        onCancel: () -> Unit,
++        onResume: () -> Unit,
++        modifier: Modifier = Modifier,
++    ) {
++        Surface(
++            modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp),
++            shape = RoundedCornerShape(8.dp),
++            color = MaterialTheme.colorScheme.surfaceContainer,
++            tonalElevation = 2.dp,
++        ) {
++            Row(
++                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
++                verticalAlignment = Alignment.CenterVertically,
++            ) {
++                LinearProgressIndicator(
++                    progress = { if (task.total > 0) task.done.toFloat() / task.total else 0f },
++                    modifier = Modifier.width(64.dp),
++                )
++                Spacer(modifier = Modifier.width(12.dp))
++                Text(
++                    text = "批量收藏${if (running) "进行中" else "已中断"}：${task.done}/${task.total}",
++                    modifier = Modifier.weight(1f),
++                    style = MaterialTheme.typography.bodyMedium,
++                )
++                if (running) {
++                    TextButton(onClick = onCancel) {
++                        Text(text = "中止")
++                    }
++                } else {
++                    TextButton(onClick = onResume) {
++                        Text(text = "重续")
++                    }
++                }
++            }
++        }
++    }
