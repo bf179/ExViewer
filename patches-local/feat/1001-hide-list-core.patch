@@ -12,6 +12,20 @@ index 122ec85ed..5b51db830 100644
      suspend fun insertQuickSearch(quickSearch: QuickSearch) {
          val dao = db.quickSearchDao()
          quickSearch.id = dao.insert(quickSearch)
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt b/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
+index cb69a41c6..69d651409 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
+@@ -115,6 +115,9 @@ object Settings : DataStorePreferences(null) {
+     val hardwareBitmapThreshold = intPref("hardware_bitmap_threshold", 16384)
+     val preloadThumbAggressively = boolPref("preload_thumb_aggressively", false)
+     val animateItems = boolPref("animate_items", true)
++
++    // 隐藏列表总开关（默认关闭，与 2026-08 旧版行为一致）
++    val hideListEnabled = boolPref("hide_list_enabled", false)
+     val desktopSite = boolPref("desktop_site", true)
+ 
+     // About
 diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt
 index 72be43ba8..7c0e6d08b 100644
 --- a/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt
@@ -27,15 +41,16 @@ index 72be43ba8..7c0e6d08b 100644
          val hasRated = any { it.rated }
 diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/EhHideList.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/EhHideList.kt
 new file mode 100644
-index 000000000..a75f0a356
+index 000000000..a8750d78a
 --- /dev/null
 +++ b/app/src/main/kotlin/com/hippo/ehviewer/client/EhHideList.kt
-@@ -0,0 +1,62 @@
+@@ -0,0 +1,66 @@
 +package com.hippo.ehviewer.client
 +
 +import com.ehviewer.core.database.model.QuickSearch
 +import com.ehviewer.core.model.GalleryInfo
 +import com.hippo.ehviewer.EhDB
++import com.hippo.ehviewer.Settings
 +import kotlinx.coroutines.sync.Mutex
 +import kotlinx.coroutines.sync.withLock
 +
@@ -75,8 +90,11 @@ index 000000000..a75f0a356
 +        else -> false
 +    }
 +
-+    /** 该画廊是否应被隐藏 */
-+    suspend fun hide(info: GalleryInfo): Boolean = entries().any { it.hideType != TYPE_QUICK_SEARCH && matches(it, info) }
++    /** 该画廊是否应被隐藏（受总开关控制，默认关闭） */
++    suspend fun hide(info: GalleryInfo): Boolean {
++        if (!Settings.hideListEnabled.value) return false
++        return entries().any { it.hideType != TYPE_QUICK_SEARCH && matches(it, info) }
++    }
 +
 +    suspend fun add(entry: QuickSearch) {
 +        EhDB.insertQuickSearch(entry)
