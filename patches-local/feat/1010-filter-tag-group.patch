@@ -1,0 +1,146 @@
+diff --git a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/model/Filter.kt b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/model/Filter.kt
+index 24870cb88..599be5b3e 100644
+--- a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/model/Filter.kt
++++ b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/model/Filter.kt
+@@ -28,6 +28,9 @@ enum class FilterMode(val field: Int) {
+     TAG_NAMESPACE(3),
+     COMMENTER(4),
+     COMMENT(5),
++
++    // 复合标签（旧版 8f750fe 的 FILTER.MODE=6）：uploader: / "标题" / -白名单标签 / 黑名单标签 组合
++    TAG_GROUP(6),
+ }
+ 
+ class FilterModeConverter {
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/EhFilter.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/EhFilter.kt
+index 3d297b6de..f6fb3f50e 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/client/EhFilter.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/EhFilter.kt
+@@ -52,11 +52,53 @@ object EhFilter : CoroutineScope {
+         return nameSpace == filter
+     }
+ 
+-    suspend fun needTags() = filters.await().any { it.enable && (it.mode == FilterMode.TAG || it.mode == FilterMode.TAG_NAMESPACE) }
++    suspend fun needTags() = filters.await().any {
++        it.enable && (it.mode == FilterMode.TAG || it.mode == FilterMode.TAG_NAMESPACE || it.mode == FilterMode.TAG_GROUP)
++    }
+     suspend fun filterTitle(info: GalleryInfo) = anyActive(FilterMode.TITLE) { info.title.orEmpty().contains(it.text, true) }
+     suspend fun filterUploader(info: GalleryInfo) = anyActive(FilterMode.UPLOADER) { it.text == info.uploader }
+     suspend fun filterTag(info: GalleryInfo) = info.simpleTags?.any { tag -> anyActive(FilterMode.TAG) { matchTag(tag, it.text.lowercase()) } } == true
+     suspend fun filterTagNamespace(info: GalleryInfo) = info.simpleTags?.any { tag -> anyActive(FilterMode.TAG_NAMESPACE) { matchTagNamespace(tag, it.text.lowercase()) } } == true
+     suspend fun filterCommenter(commenter: String) = anyActive(FilterMode.COMMENTER) { it.text == commenter }
+     suspend fun filterComment(comment: String) = anyActive(FilterMode.COMMENT) { regex(it).containsMatchIn(comment) }
++
++    /**
++     * 复合标签过滤（旧版 `FILTER.MODE=6` 语义，兼容 8f750fe 数据库导入）。
++     *
++     * 规则文本按逗号分段，支持四种写法：
++     * - `uploader:xxx`  上传者，全部匹配
++     * - `"标题片段"`     标题包含，全部匹配
++     * - `-tag`          白名单标签，任一命中则不屏蔽
++     * - 其它            黑名单标签，全部匹配
++     *
++     * 已收藏画廊不参与过滤（与旧版一致）。
++     */
++    suspend fun filterTagGroup(info: GalleryInfo): Boolean {
++        if (info.favoriteSlot != GalleryInfo.NOT_FAVORITED) return false
++        return anyActive(FilterMode.TAG_GROUP) { composite ->
++            val parts = composite.text.split(',').map { it.trim() }.filter { it.isNotEmpty() }
++            val uploaderFilters = mutableListOf<String>()
++            val titleFilters = mutableListOf<String>()
++            val blacklistTagFilters = mutableListOf<String>()
++            val whitelistTagFilters = mutableListOf<String>()
++            parts.forEach { part ->
++                when {
++                    part.startsWith("uploader:") -> uploaderFilters.add(part.removePrefix("uploader:").trim())
++                    part.startsWith("\"") && part.endsWith("\"") && part.length > 1 ->
++                        titleFilters.add(part.substring(1, part.length - 1).trim())
++                    part.startsWith("-") -> whitelistTagFilters.add(part.substring(1).lowercase())
++                    else -> blacklistTagFilters.add(part.lowercase())
++                }
++            }
++            val tags = info.simpleTags.orEmpty().map { it.lowercase() }
++            if (whitelistTagFilters.isNotEmpty() && tags.any { tag -> whitelistTagFilters.any { matchTag(tag, it) } }) {
++                return@anyActive false
++            }
++            val uploaderMatched = uploaderFilters.isEmpty() || uploaderFilters.all { it.equals(info.uploader, true) }
++            val titleMatched = titleFilters.isEmpty() || titleFilters.all { info.title.orEmpty().contains(it, true) }
++            val blacklistMatched = blacklistTagFilters.isEmpty() ||
++                blacklistTagFilters.all { required -> tags.any { tag -> matchTag(tag, required) } }
++            uploaderMatched && titleMatched && blacklistMatched
++        }
++    }
+ }
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt
+index 073aa6e28..020e6916f 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt
+@@ -478,7 +478,7 @@ object EhEngine {
+         val hasRated = any { it.rated }
+         val needApi = filter && needTags() && !hasTags || Settings.showGalleryPages.value && !hasPages || hasRated
+         if (needApi) fillGalleryListByApi(this@fillInfo, url)
+-        if (filter) removeAllSuspend { filterUploader(it) || filterTag(it) || filterTagNamespace(it) }
++        if (filter) removeAllSuspend { filterUploader(it) || filterTag(it) || filterTagNamespace(it) || filterTagGroup(it) }
+         forEach {
+             if (it.favoriteSlot == GalleryInfo.NOT_FAVORITED && EhDB.containLocalFavorites(it.gid)) {
+                 it.favoriteSlot = GalleryInfo.LOCAL_FAVORITED
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/FilterScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/FilterScreen.kt
+index 6aa1fac60..5434145e5 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/FilterScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/FilterScreen.kt
+@@ -229,6 +229,7 @@ fun AnimatedVisibilityScope.FilterScreen(navigator: DestinationsNavigator) = Scr
+                         FilterMode.TAG_NAMESPACE -> R.string.filter_tag_namespace
+                         FilterMode.COMMENTER -> R.string.filter_commenter
+                         FilterMode.COMMENT -> R.string.filter_comment
++                        FilterMode.TAG_GROUP -> R.string.filter_tag_group
+                     }
+                     if (filters.isNotEmpty()) {
+                         item(key = filterMode) {
+diff --git a/app/src/main/res/values/arrays.xml b/app/src/main/res/values/arrays.xml
+index c6c80eb9b..2cca3620f 100644
+--- a/app/src/main/res/values/arrays.xml
++++ b/app/src/main/res/values/arrays.xml
+@@ -163,6 +163,7 @@
+         <item>@string/filter_tag_namespace</item>
+         <item>@string/filter_commenter</item>
+         <item>@string/filter_comment</item>
++        <item>@string/filter_tag_group</item>
+     </string-array>
+ 
+     <string-array name="tag_translation_metadata">
+diff --git a/core/i18n/src/commonMain/moko-resources/base/strings.xml b/core/i18n/src/commonMain/moko-resources/base/strings.xml
+index 2bd1580dd..7c640a914 100644
+--- a/core/i18n/src/commonMain/moko-resources/base/strings.xml
++++ b/core/i18n/src/commonMain/moko-resources/base/strings.xml
+@@ -281,6 +281,7 @@
+     <string name="filter_tag_namespace">Tag namespace</string>
+     <string name="filter_commenter">Commenter</string>
+     <string name="filter_comment">Comment Regex</string>
++    <string name="filter_tag_group">Composite Tag Rule</string>
+     <string name="delete_filter">Delete blocker \"%s\"?</string>
+     <string name="add_filter">Add blocker</string>
+     <string name="show_definition">Show definition</string>
+diff --git a/core/i18n/src/commonMain/moko-resources/zh-rCN/strings.xml b/core/i18n/src/commonMain/moko-resources/zh-rCN/strings.xml
+index 2b9e51b24..bd16ed4b7 100644
+--- a/core/i18n/src/commonMain/moko-resources/zh-rCN/strings.xml
++++ b/core/i18n/src/commonMain/moko-resources/zh-rCN/strings.xml
+@@ -264,6 +264,7 @@
+     <string name="filter_tag_namespace">标签组</string>
+     <string name="filter_commenter">评论者</string>
+     <string name="filter_comment">评论</string>
++    <string name="filter_tag_group">复合标签</string>
+     <string name="delete_filter">删除屏蔽项“%s”？</string>
+     <string name="add_filter">添加屏蔽项</string>
+     <string name="show_definition">查看定义</string>
+diff --git a/core/i18n/src/commonMain/moko-resources/zh-rTW/strings.xml b/core/i18n/src/commonMain/moko-resources/zh-rTW/strings.xml
+index 1c21b47cb..9bcb53058 100644
+--- a/core/i18n/src/commonMain/moko-resources/zh-rTW/strings.xml
++++ b/core/i18n/src/commonMain/moko-resources/zh-rTW/strings.xml
+@@ -262,6 +262,7 @@
+     <string name="filter_tag_namespace">標籤組</string>
+     <string name="filter_commenter">評論者</string>
+     <string name="filter_comment">評論</string>
++    <string name="filter_tag_group">複合標籤</string>
+     <string name="delete_filter">刪除隱藏項“%s”？</string>
+     <string name="add_filter">新增隱藏項</string>
+     <string name="show_definition">檢視定義</string>

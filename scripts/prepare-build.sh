@@ -40,13 +40,15 @@ else
 fi
 
 echo "[3/5] 应用功能补丁（feat/ 共用）"
+# Windows 下 submodule 为 CRLF、补丁多为 LF：允许忽略行尾差异，避免本地误报冲突（CI Linux 不受影响）
+GIT_APPLY="git -c core.whitespace=cr-at-eol apply --ignore-whitespace"
 for p in "$ROOT"/patches-local/feat/*.patch; do
   [ -e "$p" ] || continue
   if [ "$MODE" = "--check" ]; then
-    git apply --check "$p" || { echo "!! 冲突: $(basename "$p")"; exit 3; }
+    $GIT_APPLY --check "$p" || { echo "!! 冲突: $(basename "$p")"; exit 3; }
     echo "    ok  $(basename "$p")"
   else
-    git apply "$p" || { echo "!! 失败: $(basename "$p")"; exit 3; }
+    $GIT_APPLY "$p" || { echo "!! 失败: $(basename "$p")"; exit 3; }
     echo "    applied $(basename "$p")"
   fi
 done
