@@ -97,7 +97,7 @@ index 000000000..83815295a
 +    return try {
 +        val response = EhApplication.ktorClient.get(url) {
 +            // 服务端未配置 token 时不发 Authorization，避免空 Bearer 被网关裁掉
-+            if (apiToken.isNotBlank()) header("Authorization", "Bearer $apiToken")
++            if (!apiToken.isNullOrBlank()) header("Authorization", "Bearer $apiToken")
 +        }
 +        if (response.status.value in 200..299) {
 +            decode(response.body<String>())
