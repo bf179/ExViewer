@@ -93,7 +93,7 @@ index 000000000..1e6f021bd
 +// 优先队列 GET（Bearer 鉴权）：失败返回 null 并提示
 +private suspend fun <T> pqGet(url: String, decode: (String) -> T): T? {
 +    val apiToken = Settings.apiToken.value
-+    if (apiToken.isBlank()) {
++    if (apiToken.isNullOrBlank()) {
 +        pqToast("未配置 API Token，无法请求优先队列")
 +        return null
 +    }
