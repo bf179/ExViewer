@@ -1,9 +1,9 @@
 name: Releases
 
+# 已由 release.yml（双轨：direct + cai）接管发布；
+# 保留手动触发，便于单独排查上游单轨构建
 on:
-  push:
-    tags:
-      - "*"
+  workflow_dispatch:
 
 jobs:
   build:

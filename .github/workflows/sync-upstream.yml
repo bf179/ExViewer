@@ -1,0 +1,28 @@
+name: Sync upstream check
+
+# B8：每周检查上游（Codeberg EhViewer）是否有新提交，并预演本仓库补丁。
+#   - 补丁全可应用 → issue 提示「可升级」，附 SHA 与升级步骤
+#   - 有冲突       → issue 标注冲突补丁，附复现命令
+# 不自动合并、不自动推送。
+
+on:
+  schedule:
+    - cron: '0 20 * * 0' # 周一 04:00（北京时间）
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - name: Run upstream check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/sync-upstream-check.sh

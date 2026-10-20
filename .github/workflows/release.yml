@@ -1,0 +1,99 @@
+name: Release (both tracks)
+
+# B8：打 tag（v*）时同时出两个包并发布 Release：
+#   - ExViewer-direct-*.apk  直连版（ujui 基线 + 直连补丁 + 我的功能）
+#   - ExViewer-cai-*.apk     彩E 轨（彩E 基线 + 我的功能，需代理）
+# 两条轨都从当前 commit 的 submodule 指针构建，保证可复现。
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  direct:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version-file: EhViewer/.java-version
+      - name: Install Rust + Android targets
+        working-directory: EhViewer
+        run: |
+          cat rust-toolchain.toml
+          rustup show
+          rustup target add aarch64-linux-android armv7-linux-androideabi \
+            thumbv7neon-linux-androideabi x86_64-linux-android
+      - name: Prepare tree (direct)
+        run: bash scripts/prepare-build.sh direct
+      - name: Build
+        working-directory: EhViewer
+        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rel-direct
+          path: EhViewer/app/build/outputs/apk/**/*.apk
+
+  cai:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version-file: EhViewer/.java-version
+      - name: Install Rust + Android targets
+        working-directory: EhViewer
+        run: |
+          cat rust-toolchain.toml
+          rustup show
+          rustup target add aarch64-linux-android armv7-linux-androideabi \
+            thumbv7neon-linux-androideabi x86_64-linux-android
+      - name: Prepare tree (cai)
+        run: bash scripts/prepare-build.sh cai
+      - name: Build
+        working-directory: EhViewer
+        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rel-cai
+          path: EhViewer/app/build/outputs/apk/**/*.apk
+
+  publish:
+    needs: [direct, cai]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: Collect APKs
+        run: |
+          set -e
+          mkdir -p out
+          find dist -name '*.apk' | while read -r f; do
+            flavor=$(basename "$(dirname "$(dirname "$f")")")
+            base=$(basename "$f")
+            cp "$f" "out/${flavor}-${base}"
+          done
+          ls -lh out
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          gh release create "$TAG" out/*.apk \
+            --title "$TAG" \
+            --notes "双轨构建：direct（直连，包名 moe.tarsin.ehviewer.cc）/ cai（彩E 轨，包名 moe.tarsin.ehviewer.cai）。
+          两包可共存安装；数据库结构一致（v26），互相导入兼容。"

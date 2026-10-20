@@ -1,0 +1,77 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt b/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
+index cb69a41c6..37dcdbd47 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
+@@ -162,6 +162,9 @@ object Settings : DataStorePreferences(null) {
+     val orientationMode = intPref("pref_default_orientation_type_key", OrientationType.DEFAULT.prefValue)
+     val showReaderSeekbar = boolPref("pref_show_reader_seekbar", true)
+     val showPageNumber = boolPref("pref_show_page_number_key", true)
++
++    // 历史页隐藏已收藏画廊（B6）
++    val hideFavInHistory = boolPref("hide_fav_in_history", false)
+     val readerTheme = intPref("pref_reader_theme_key", 1)
+     val doubleTapToZoom = boolPref("pref_double_tap_to_zoom", true)
+     val fullscreen = boolPref("fullscreen", true)
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/HistoryScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/HistoryScreen.kt
+index 7c13753d0..adfc58e9f 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/HistoryScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/HistoryScreen.kt
+@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.height
+ import androidx.compose.foundation.layout.padding
+ import androidx.compose.material.icons.Icons
+ import androidx.compose.material.icons.filled.ClearAll
++import androidx.compose.material.icons.filled.Visibility
++import androidx.compose.material.icons.filled.VisibilityOff
+ import androidx.compose.material3.Icon
+ import androidx.compose.material3.IconButton
+ import androidx.compose.material3.IconButtonDefaults
+@@ -41,8 +43,10 @@ import androidx.paging.cachedIn
+ import androidx.paging.compose.collectAsLazyPagingItems
+ import androidx.paging.compose.itemContentType
+ import androidx.paging.compose.itemKey
++import androidx.paging.filter
+ import androidx.paging.map
+ import com.ehviewer.core.i18n.R
++import com.ehviewer.core.model.GalleryInfo.Companion.NOT_FAVORITED
+ import com.ehviewer.core.ui.component.FastScrollLazyColumn
+ import com.ehviewer.core.ui.icons.EhIcons
+ import com.ehviewer.core.ui.icons.big.History
+@@ -81,7 +85,8 @@ fun AnimatedVisibilityScope.HistoryScreen(navigator: DestinationsNavigator) = Sc
+     DrawerHandle(!searchBarExpanded)
+ 
+     val density = LocalDensity.current
+-    val historyData = rememberInVM {
++    val hideFavInHistory by Settings.hideFavInHistory.collectAsState()
++    val historyData = rememberInVM(hideFavInHistory) {
+         Pager(config = PagingConfig(pageSize = 20, jumpThreshold = 40)) {
+             if (keyword.isNotEmpty()) {
+                 EhDB.searchHistory(keyword)
+@@ -90,9 +95,11 @@ fun AnimatedVisibilityScope.HistoryScreen(navigator: DestinationsNavigator) = Sc
+             }
+         }.flow.map { data ->
+             val favCat = Settings.favCat
+-            data.map {
++            val mapped = data.map {
+                 it.apply { favoriteName = favCat.getOrNull(favoriteSlot) }
+             }
++            // 历史页隐藏已收藏（B6）
++            if (hideFavInHistory) mapped.filter { it.favoriteSlot == NOT_FAVORITED } else mapped
+         }.cachedIn(viewModelScope)
+     }.collectAsLazyPagingItems()
+     FavouriteStatusRouter.Observe(historyData)
+@@ -107,6 +114,15 @@ fun AnimatedVisibilityScope.HistoryScreen(navigator: DestinationsNavigator) = Sc
+         searchFieldHint = hint,
+         searchBarOffsetY = { searchBarOffsetY },
+         trailingIcon = {
++            IconButton(
++                onClick = { Settings.hideFavInHistory.value = !hideFavInHistory },
++                shapes = IconButtonDefaults.shapes(),
++            ) {
++                Icon(
++                    imageVector = if (hideFavInHistory) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
++                    contentDescription = "隐藏已收藏",
++                )
++            }
+             IconButton(
+                 onClick = {
+                     launch {
