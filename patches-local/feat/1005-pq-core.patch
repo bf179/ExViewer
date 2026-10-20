@@ -93,7 +93,7 @@ index 000000000..1e6f021bd
 +// 优先队列 GET（Bearer 鉴权）：失败返回 null 并提示
 +private suspend fun <T> pqGet(url: String, decode: (String) -> T): T? {
 +    val apiToken = Settings.apiToken.value
-+    if (apiToken.isNullOrBlank()) {
++    if (apiToken.isBlank()) {
 +        pqToast("未配置 API Token，无法请求优先队列")
 +        return null
 +    }
@@ -151,10 +151,10 @@ index 0182348f0..6694b689f 100644
                  state = Settings.meteredNetworkWarning.asMutableState(),
 diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/SyncHideScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/SyncHideScreen.kt
 new file mode 100644
-index 000000000..ef5a5f56f
+index 000000000..4f683e3e3
 --- /dev/null
 +++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/SyncHideScreen.kt
-@@ -0,0 +1,104 @@
+@@ -0,0 +1,109 @@
 +package com.hippo.ehviewer.ui.settings
 +
 +import androidx.compose.animation.AnimatedVisibilityScope
@@ -251,6 +251,11 @@ index 000000000..ef5a5f56f
 +                title = "历史页隐藏优先队列标签画廊",
 +                summary = "历史记录页独立控制，不随上一项",
 +                state = Settings.hidePqTaggedInHistory.asMutableState(),
++            )
++            SwitchPreference(
++                title = "整理模式（页内聚类）",
++                summary = "同一 [系列] 或同一画师的画廊在列表中相邻排列",
++                state = Settings.organizeMode.asMutableState(),
 +            )
 +            Preference(
 +                title = "隐藏列表管理",

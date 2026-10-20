@@ -1,0 +1,82 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt b/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
+index cb69a41c6..d17bff84f 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
+@@ -164,6 +164,9 @@ object Settings : DataStorePreferences(null) {
+     val showPageNumber = boolPref("pref_show_page_number_key", true)
+     val readerTheme = intPref("pref_reader_theme_key", 1)
+     val doubleTapToZoom = boolPref("pref_double_tap_to_zoom", true)
++
++    // 整理模式（B6b）：列表页内按 [系列] / 画师 聚类重排
++    val organizeMode = boolPref("organize_mode", false)
+     val fullscreen = boolPref("fullscreen", true)
+     val cutoutShort = boolPref("cutout_short", true)
+     val keepScreenOn = boolPref("pref_keep_screen_on_key", true)
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt
+index 72be43ba8..c221bb4b6 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt
+@@ -483,6 +483,8 @@ object EhEngine {
+             }
+             if (!needApi) it.generateSLang()
+         }
++        // 整理模式（B6b）：页内按 [系列] / 画师 聚类重排
++        if (Settings.organizeMode.value) applyOrganizeClustering()
+     }
+ 
+     suspend fun addFavorites(galleryList: List<Pair<Long, String>>, dstCat: Int) {
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/GalleryOrganize.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/GalleryOrganize.kt
+new file mode 100644
+index 000000000..3b1d6476e
+--- /dev/null
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/GalleryOrganize.kt
+@@ -0,0 +1,49 @@
++package com.hippo.ehviewer.client
++
++import com.ehviewer.core.model.BaseGalleryInfo
++
++/**
++ * 整理模式（B6b）：页内聚类。
++ *
++ * 聚类键优先级：
++ *  1. 标题开头的 [方括号] 内容（如 `[yossa]xxx` → `yossa`）
++ *  2. simpleTags 里的 artist: / group: 值
++ *  3. 其他条自成一类（用 gid 保证不被合并）
++ *
++ * 说明：只对**已加载的这一页**重排，不做跨页全局聚类
++ * （分页数据在 Paging 层，跨页排序会导致无限翻页）。
++ */
++
++private val BRACKET_REGEX = Regex("^\\[(.*?)\\]")
++
++fun BaseGalleryInfo.extractTitleBracket(): String? {
++    val t = title ?: return null
++    return BRACKET_REGEX.find(t)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotEmpty() }
++}
++
++fun BaseGalleryInfo.extractClusterTag(): String? {
++    val tags = simpleTags ?: return null
++    for (tag in tags) {
++        val parts = tag.split(':', limit = 2)
++        if (parts.size == 2 && (parts[0] == "artist" || parts[0] == "group")) {
++            return parts[1].trim().lowercase().takeIf { it.isNotEmpty() }
++        }
++    }
++    return null
++}
++
++/** 稳定的页内聚类：同键的画廊按首次出现顺序聚到一起，其余顺序不变 */
++fun MutableList<BaseGalleryInfo>.applyOrganizeClustering() {
++    if (size < 3) return
++    val buckets = LinkedHashMap<String, MutableList<BaseGalleryInfo>>()
++    for (info in this) {
++        val key = info.extractTitleBracket()?.lowercase()
++            ?: info.extractClusterTag()
++            ?: "gid:${info.gid}"
++        buckets.getOrPut(key) { mutableListOf() }.add(info)
++    }
++    // 全是单条，没有可聚类的分组
++    if (buckets.size == size) return
++    clear()
++    buckets.values.forEach { addAll(it) }
++}
