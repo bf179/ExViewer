@@ -1,0 +1,304 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt b/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
+@@ -109,0 +110,5 @@
++    // 自有服务端联动（旧版 8f750fe）：收藏同步 SAPI / 优先队列入队 PAPI / 快捷附加关键词
++    val syncFav = boolPref("sync_fav", false)
++    val sapiUrl = stringOrNullPref("sapi_url")
++    val papiUrl = stringOrNullPref("papi_url")
++    val addKeyword = stringOrNullPref("add_keyword")
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt
+index 020e6916f..2939c3261 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt
+@@ -329,4 +329,7 @@ object EhEngine {
+             }
+         }.executeSafely { }
++
++        // 同步收藏状态到自有服务端（SAPI，未启用则直接返回）
++        syncFavoriteToServer(gid, token, dstCat, catStr)
+     }
+ 
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt b/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt
+index ac68cbce3..615939271 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt
+@@ -41,4 +41,5 @@ import com.ehviewer.core.files.delete
+ import com.ehviewer.core.files.sendTo
+ import com.ehviewer.core.model.GalleryInfo
++import com.hippo.ehviewer.client.syncFavoriteToServer
+ import com.hippo.ehviewer.download.DownloadManager
+ import kotlinx.coroutines.flow.Flow
+@@ -166,4 +167,5 @@ object EhDB {
+         db.localFavoritesDao().deleteByKey(galleryInfo.gid)
+         deleteGalleryInfo(galleryInfo.asEntity())
++        syncFavoriteToServer(galleryInfo.gid, galleryInfo.token, galleryInfo.favoriteSlot, "del")
+     }
+ 
+@@ -182,4 +184,5 @@ object EhDB {
+         putGalleryInfo(galleryInfo.asEntity())
+         db.localFavoritesDao().upsert(LocalFavoriteInfo(galleryInfo.gid))
++        syncFavoriteToServer(galleryInfo.gid, galleryInfo.token, galleryInfo.favoriteSlot, "add")
+     }
+ 
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
+index 27559ae90..abf214417 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
+@@ -31,5 +31,8 @@ import androidx.compose.material.icons.automirrored.filled.Help
+ import androidx.compose.material.icons.automirrored.filled.LastPage
+ import androidx.compose.material.icons.filled.Add
+-import androidx.compose.material.icons.filled.Refresh
++import com.hippo.ehviewer.ui.modifyFavorites
++import com.ehviewer.core.network.EhCookieStore
++import com.hippo.ehviewer.client.UcApiRequest
++import com.hippo.ehviewer.client.sendUcApiRequest
+ import androidx.compose.material.icons.filled.PlaylistAdd
+ import androidx.compose.material.icons.filled.Reorder
+@@ -662,4 +665,32 @@ fun AnimatedVisibilityScope.GalleryListScreen(
+             }
+         }
++        // 快捷附加关键词（旧版 add_keyword）：把预设关键词拼到当前搜索词后
++        onClick(Icons.Default.FilterAlt) {
++            val extra = Settings.addKeyword.value
++            if (!extra.isNullOrBlank()) {
++                val base = urlBuilder.keyword.orEmpty()
++                urlBuilder.keyword = if (base.isBlank()) extra else "$base $extra"
++                data.refresh()
++            }
++        }
++        // 上传当前 cookie 到服务端（SAPI /uc），仅启用同步且配置了地址时出现
++        if (Settings.syncFav.value && !Settings.sapiUrl.value.isNullOrBlank()) {
++            onClick(Icons.Default.Flight) {
++                launch {
++                    val c = EhCookieStore.getIdentityCookies()
++                    val member = c.firstOrNull { it.first == EhCookieStore.KEY_IPB_MEMBER_ID }?.second
++                    val pass = c.firstOrNull { it.first == EhCookieStore.KEY_IPB_PASS_HASH }?.second
++                    val ign = c.firstOrNull { it.first == EhCookieStore.KEY_IGNEOUS }?.second
++                    val sapi = Settings.sapiUrl.value
++                    if (!member.isNullOrBlank() && !pass.isNullOrBlank() && !ign.isNullOrBlank() &&
++                        ign != "mystery" && !sapi.isNullOrBlank()
++                    ) {
++                        sendUcApiRequest(UcApiRequest(member, "${pass}_$ign"), sapi)
++                    } else {
++                        snackbar("cookie 不完整，无法同步到服务端")
++                    }
++                }
++            }
++        }
+         onClick(Icons.Default.Refresh) {
+             urlBuilder.setRange(0)
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt
+index bd3a76e84..2ebf67f0d 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt
+@@ -109,4 +109,6 @@ import com.hippo.ehviewer.client.EhEngine
+ import com.hippo.ehviewer.client.EhFilter.remember
+ import com.hippo.ehviewer.client.EhUrl
++import com.hippo.ehviewer.client.PqApiRequest
++import com.hippo.ehviewer.client.sendPqApiRequest
+ import com.hippo.ehviewer.client.EhUtils
+ import com.hippo.ehviewer.client.data.ListUrlBuilder
+@@ -749,4 +751,11 @@ fun BelowHeader(galleryDetail: GalleryDetail, voteTag: VoteTag) {
+                             snackbar(filterAdded)
+                         }
++                        val papiUrl = Settings.papiUrl.value
++                        if (!papiUrl.isNullOrBlank()) {
++                            onSelect("添加至优先队列") {
++                                sendPqApiRequest(PqApiRequest("loliwant", "tag", tag), papiUrl)
++                                snackbar("已提交到优先队列")
++                            }
++                        }
+                         if (galleryDetail.apiUid >= 0) {
+                             when (vote) {
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/SyncHideScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/SyncHideScreen.kt
+index 81a5c90b0..96dc57e34 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/SyncHideScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/SyncHideScreen.kt
+@@ -106,4 +106,48 @@ fun AnimatedVisibilityScope.SyncHideScreen(navigator: DestinationsNavigator) = S
+                 summary = "管理标题 / 上传者 / 标签三类隐藏条目",
+             ) { navigator.navigate(HideListScreenDestination) }
++            SwitchPreference(
++                title = "同步收藏到自有服务端（SAPI）",
++                summary = "收藏 / 取消收藏后向服务端 POST /exl，并在列表工具栏提供 cookie 上传",
++                state = Settings.syncFav.asMutableState(),
++            )
++            Preference(
++                title = "SAPI 地址",
++                summary = Settings.sapiUrl.value ?: "未设置（如 https://exl.loliwant.cc）",
++            ) {
++                coroutineScope.launch {
++                    val input = awaitInputText(
++                        initial = Settings.sapiUrl.value.orEmpty(),
++                        title = "SAPI 地址",
++                        hint = "https://exl.loliwant.cc",
++                    )
++                    Settings.sapiUrl.value = input.trim().ifBlank { null }
++                }
++            }
++            Preference(
++                title = "PAPI 地址（优先队列入队）",
++                summary = Settings.papiUrl.value ?: "未设置（如 https://exl.loliwant.cc/add_item）",
++            ) {
++                coroutineScope.launch {
++                    val input = awaitInputText(
++                        initial = Settings.papiUrl.value.orEmpty(),
++                        title = "PAPI 地址",
++                        hint = "https://exl.loliwant.cc/add_item",
++                    )
++                    Settings.papiUrl.value = input.trim().ifBlank { null }
++                }
++            }
++            Preference(
++                title = "快捷附加关键词",
++                summary = Settings.addKeyword.value ?: "未设置",
++            ) {
++                coroutineScope.launch {
++                    val input = awaitInputText(
++                        initial = Settings.addKeyword.value.orEmpty(),
++                        title = "快捷附加关键词",
++                        hint = "如 -l:chinese$",
++                    )
++                    Settings.addKeyword.value = input.trim().ifBlank { null }
++                }
++            }
+             Preference(
+                 title = "任务中心",
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/ExlApi.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/ExlApi.kt
+new file mode 100644
+--- /dev/null
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/ExlApi.kt
+@@ -0,0 +1,133 @@
++package com.hippo.ehviewer.client
++
++import android.os.Handler
++import android.os.Looper
++import android.widget.Toast
++import com.hippo.ehviewer.EhApplication
++import com.hippo.ehviewer.Settings
++import io.ktor.client.call.body
++import io.ktor.client.request.post
++import io.ktor.client.request.setBody
++import io.ktor.http.ContentType
++import io.ktor.http.content.TextContent
++import kotlinx.coroutines.delay
++import kotlinx.serialization.Serializable
++import kotlinx.serialization.encodeToString
++import kotlinx.serialization.json.Json
++import splitties.init.appCtx
++
++/**
++ * 自有服务端联动（旧版 8f750fe 的 SAPI / PAPI 特性移植）。
++ *
++ * - SAPI（`sapi_url`，如 `https://exl.loliwant.cc`）：收藏 / 取消收藏后同步收藏状态
++ *   `POST /exl`，body `{user,gid,token,favoriteslot,op}`；`/uc` 上传 cookie 身份。
++ * - PAPI（`papi_url`，如 `https://exl.loliwant.cc/add_item`）：把标签加入优先队列。
++ */
++@Serializable
++data class ExlApiRequest(
++    val user: String,
++    val gid: Long,
++    val token: String,
++    var favoriteslot: Int,
++    val op: String,
++)
++
++@Serializable
++data class PqApiRequest(
++    val user: String,
++    val itype: String,
++    val icontent: String,
++)
++
++/** /uc：gid = ipb_member_id，token = "ipb_pass_hash_igneous" */
++@Serializable
++data class UcApiRequest(
++    val gid: String,
++    val token: String,
++)
++
++private const val DEFAULT_USER = "loliwant"
++private var currentToast: Toast? = null
++
++fun showToastOnMainThread(message: String) {
++    Handler(Looper.getMainLooper()).post {
++        currentToast?.cancel()
++        currentToast = Toast.makeText(appCtx, message, Toast.LENGTH_SHORT).apply { show() }
++    }
++}
++
++/** 通用 JSON POST（带 3 次重试，间隔 5s），返回是否成功 */
++private suspend fun postJson(url: String, payload: String, showSuccessToast: Boolean): Boolean {
++    repeat(3) { attempt ->
++        try {
++            val response = EhApplication.ktorClient.post(url) {
++                setBody(TextContent(payload, ContentType.Application.Json))
++            }
++            val bodyText: String = response.body()
++            val json = runCatching { Json.decodeFromString<Map<String, String>>(bodyText) }.getOrNull()
++            when (response.status.value) {
++                in 200..299 -> {
++                    if (showSuccessToast) {
++                        showToastOnMainThread(json?.get("message") ?: "已同步到服务端")
++                    }
++                    return true
++                }
++
++                400 -> {
++                    showToastOnMainThread("请求错误: ${json?.get("error") ?: bodyText.take(80)}")
++                    return false
++                }
++
++                in 500..599 -> {
++                    showToastOnMainThread("服务端错误: ${json?.get("error") ?: bodyText.take(80)}")
++                    return false
++                }
++
++                else -> {
++                    if (attempt == 2) {
++                        showToastOnMainThread("同步失败: ${response.status}")
++                        return false
++                    }
++                    delay(5000)
++                }
++            }
++        } catch (e: Exception) {
++            if (attempt == 2) {
++                showToastOnMainThread("同步异常: ${e.message}")
++                return false
++            }
++            delay(5000)
++        }
++    }
++    return false
++}
++
++suspend fun sendExlApiRequest(req: ExlApiRequest, sapi: String, showSuccessToast: Boolean = true) {
++    postJson(sapi, Json.encodeToString(req), showSuccessToast)
++}
++
++suspend fun sendPqApiRequest(req: PqApiRequest, papi: String) {
++    postJson(papi, Json.encodeToString(req), true)
++}
++
++suspend fun sendUcApiRequest(req: UcApiRequest, sapi: String) {
++    val url = sapi.trimEnd('/') + "/uc"
++    postJson(url, Json.encodeToString(req), true)
++}
++
++/** 收藏状态同步入口：未启用或未配置地址时直接返回 */
++suspend fun syncFavoriteToServer(
++    gid: Long,
++    token: String,
++    favoriteSlot: Int,
++    op: String,
++    showSuccessToast: Boolean = false,
++) {
++    if (!Settings.syncFav.value) return
++    val sapi = Settings.sapiUrl.value?.takeIf { it.isNotBlank() } ?: return
++    sendExlApiRequest(
++        ExlApiRequest(user = DEFAULT_USER, gid = gid, token = token, favoriteslot = favoriteSlot, op = op),
++        sapi,
++        showSuccessToast,
++    )
++}
