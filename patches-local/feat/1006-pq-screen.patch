@@ -28,7 +28,7 @@ index 061f19dc5..8508161ab 100644
      Triple(HistoryScreenDestination, R.string.history, Icons.Default.History),
 diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/PriorityQueueScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/PriorityQueueScreen.kt
 new file mode 100644
-index 000000000..3fc788145
+index 000000000..6dcc4f05e
 --- /dev/null
 +++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/PriorityQueueScreen.kt
 @@ -0,0 +1,367 @@
@@ -375,7 +375,7 @@ index 000000000..3fc788145
 +            Text(text = group.group_content, maxLines = 1, overflow = TextOverflow.Ellipsis)
 +        },
 +        supportingContent = {
-+            Text(text = "共 ${group.count} 个画廊")
++            Text(text = "共 ${group.gallery_count} 个画廊")
 +        },
 +        trailingContent = {
 +            Row(verticalAlignment = Alignment.CenterVertically) {
