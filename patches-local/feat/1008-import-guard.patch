@@ -1,0 +1,33 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/AdvancedScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/AdvancedScreen.kt
+index 5aeac6c8c..019b99644 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/AdvancedScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/AdvancedScreen.kt
+@@ -103,7 +103,16 @@ private suspend fun exportDatabase(uri: Uri) {
+ context(ctx: Context)
+ private suspend fun importDatabase(uri: Uri) {
+     ctx.grantUriPermission(BuildConfig.APPLICATION_ID, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+-    EhDB.importDB(uri.toOkioPath())
++    try {
++        EhDB.importDB(uri.toOkioPath())
++    } catch (e: Exception) {
++        // B7 版本守卫：备份可能来自更新的客户端（DB 版本高于当前 v26），或文件已损坏
++        throw IllegalStateException(
++            "导入失败：备份数据库版本高于当前客户端（当前 DB v26）。请升级客户端后再导入；" +
++                "原始错误：${e.message}",
++            e,
++        )
++    }
+ }
+ 
+ @Destination<RootGraph>
+@@ -261,7 +270,9 @@ fun AnimatedVisibilityScope.AdvancedScreen(navigator: DestinationsNavigator) = S
+                         launchSnackbar(importSucceed)
+                     }.onFailure {
+                         logcat(it)
+-                        launchSnackbar(importFailed)
++                        // B7：版本守卫等带明确原因的失败直接把原因展示给用户
++                        val hint = it.message?.takeIf { msg -> msg.startsWith("导入失败") }
++                        launchSnackbar(hint ?: importFailed)
+                     }
+                 }
+             }
