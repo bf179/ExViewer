@@ -18,10 +18,10 @@ index cb69a41c6..ac6b751b0 100644
      val colorFilter = boolPref("pref_color_filter_key", false)
 diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/PqApi.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/PqApi.kt
 new file mode 100644
-index 000000000..1e6f021bd
+index 000000000..83815295a
 --- /dev/null
 +++ b/app/src/main/kotlin/com/hippo/ehviewer/client/PqApi.kt
-@@ -0,0 +1,104 @@
+@@ -0,0 +1,102 @@
 +package com.hippo.ehviewer.client
 +
 +import android.widget.Toast
@@ -34,6 +34,7 @@ index 000000000..1e6f021bd
 +import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.withContext
++import kotlinx.serialization.SerialName
 +import kotlinx.serialization.Serializable
 +import kotlinx.serialization.json.Json
 +import splitties.init.appCtx
@@ -55,7 +56,7 @@ index 000000000..1e6f021bd
 +@Serializable
 +data class PqGroupItem(
 +    val group_content: String = "",
-+    val count: Int = 0,
++    @SerialName("gallery_count") val gallery_count: Int = 0,
 +    val new_count: Int = 0,
 +)
 +
@@ -93,13 +94,10 @@ index 000000000..1e6f021bd
 +// 优先队列 GET（Bearer 鉴权）：失败返回 null 并提示
 +private suspend fun <T> pqGet(url: String, decode: (String) -> T): T? {
 +    val apiToken = Settings.apiToken.value
-+    if (apiToken.isNullOrBlank()) {
-+        pqToast("未配置 API Token，无法请求优先队列")
-+        return null
-+    }
 +    return try {
 +        val response = EhApplication.ktorClient.get(url) {
-+            header("Authorization", "Bearer $apiToken")
++            // 服务端未配置 token 时不发 Authorization，避免空 Bearer 被网关裁掉
++            if (apiToken.isNotBlank()) header("Authorization", "Bearer $apiToken")
 +        }
 +        if (response.status.value in 200..299) {
 +            decode(response.body<String>())
