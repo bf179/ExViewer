@@ -36,7 +36,11 @@ if [ "$TRACK" = "direct" ]; then
       || { echo "!! 包名未变为 .cc（ujui apply.sh 结构变化，两轨会撞包名）"; exit 2; }
   fi
 else
-  echo "[2/5] 彩E 轨：跳过 ujui 直连补丁（本版本无直连、需代理）"
+  if [ "$TRACK" = "legacy" ]; then
+    echo "[2/5] 旧包名轨：跳过 ujui 直连补丁（仅用于导出旧版数据）"
+  else
+    echo "[2/5] 彩E 轨：跳过 ujui 直连补丁（本版本无直连、需代理）"
+  fi
 fi
 
 echo "[3/5] 应用功能补丁（feat/ 共用）"
@@ -61,24 +65,38 @@ if [ "$TRACK" = "direct" ]; then
     echo "    applied $(basename "$p")"
   done
 else
-  echo "[4/5] 应用彩E 轨补丁（cai-only/）"
-  for p in "$ROOT"/patches-local/cai-only/*.patch; do
-    [ -e "$p" ] || continue
-    git apply "$p" || { echo "!! 失败: $(basename "$p")"; exit 4; }
-    echo "    applied $(basename "$p")"
-  done
+  if [ "$TRACK" = "cai" ]; then
+    echo "[4/5] 应用彩E 轨补丁（cai-only/）"
+    for p in "$ROOT"/patches-local/cai-only/*.patch; do
+      [ -e "$p" ] || continue
+      git apply "$p" || { echo "!! 失败: $(basename "$p")"; exit 4; }
+      echo "    applied $(basename "$p")"
+    done
 
-  # 共存：彩E 轨用独立包名 + 独立应用名（避免与官方彩E/直连轨冲突）
-  echo "    [cai] 改包名 -> moe.tarsin.ehviewer.cai"
-  sed -i 's/applicationId = "moe.tarsin.ehviewer"/applicationId = "moe.tarsin.ehviewer.cai"/' app/build.gradle.kts
-  grep -q 'applicationId = "moe.tarsin.ehviewer.cai"' app/build.gradle.kts \
-    || { echo "!! 包名改写失败（上游 build.gradle.kts 结构变化）"; exit 5; }
+    # 共存：彩E 轨用独立包名 + 独立应用名（避免与官方彩E/直连轨冲突）
+    echo "    [cai] 改包名 -> moe.tarsin.ehviewer.cai"
+    sed -i 's/applicationId = "moe.tarsin.ehviewer"/applicationId = "moe.tarsin.ehviewer.cai"/' app/build.gradle.kts
+    grep -q 'applicationId = "moe.tarsin.ehviewer.cai"' app/build.gradle.kts \
+      || { echo "!! 包名改写失败（上游 build.gradle.kts 结构变化）"; exit 5; }
 
-  echo "    [cai] 改应用名 -> EhViewer·Cai"
-  sed -i 's|<string name="app_name" translatable="false">EhViewer</string>|<string name="app_name" translatable="false">EhViewer·Cai</string>|' \
-    core/i18n/src/commonMain/moko-resources/base/strings.xml
-  grep -q 'EhViewer·Cai' core/i18n/src/commonMain/moko-resources/base/strings.xml \
-    || echo "    (警告) app_name 未改写，界面名仍为 EhViewer"
+    echo "    [cai] 改应用名 -> EhViewer·Cai"
+    sed -i 's|<string name="app_name" translatable="false">EhViewer</string>|<string name="app_name" translatable="false">EhViewer·Cai</string>|' \
+      core/i18n/src/commonMain/moko-resources/base/strings.xml
+    grep -q 'EhViewer·Cai' core/i18n/src/commonMain/moko-resources/base/strings.xml \
+      || echo "    (警告) app_name 未改写，界面名仍为 EhViewer"
+  else
+    # legacy：旧包名轨，用于「覆盖旧版安装 → 导出旧库 → 迁到新包」，版本号不得高于旧包
+    echo "[4/5] 旧包名轨：复用旧 applicationId / 旧版本号（可回退旧包）"
+    sed -i 's/applicationId = "[^"]*"/applicationId = "moe.tarsin.ehviefav"/' app/build.gradle.kts
+    sed -i 's/versionCode = [0-9]*/versionCode = 180062/' app/build.gradle.kts
+    sed -i 's/"1\.15\.0-SNAPSHOT"/"1.13.1-sf"/' app/build.gradle.kts
+    sed -i 's/"1\.14\.6"/"1.13.1-sf"/' app/build.gradle.kts
+    grep -q 'applicationId = "moe.tarsin.ehviefav"' app/build.gradle.kts \
+      || { echo "!! legacy 包名改写失败"; exit 6; }
+    grep -q 'versionCode = 180062' app/build.gradle.kts \
+      || { echo "!! legacy versionCode 改写失败"; exit 6; }
+    echo "    [legacy] moe.tarsin.ehviefav / 180062 / 1.13.1-sf（与旧包同号，可随时装回旧包）"
+  fi
 fi
 
 echo "[5/5] 完成（track=$TRACK）。构建： cd EhViewer && ./gradlew :app:assembleRelease"
