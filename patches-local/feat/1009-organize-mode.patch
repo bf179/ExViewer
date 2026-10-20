@@ -1,17 +1,18 @@
 diff --git a/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt b/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
-index cb69a41c6..d17bff84f 100644
+index cb69a41c6..cd02eac99 100644
 --- a/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
 +++ b/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
-@@ -164,6 +164,9 @@ object Settings : DataStorePreferences(null) {
-     val showPageNumber = boolPref("pref_show_page_number_key", true)
-     val readerTheme = intPref("pref_reader_theme_key", 1)
-     val doubleTapToZoom = boolPref("pref_double_tap_to_zoom", true)
-+
-+    // 整理模式（B6b）：列表页内按 [系列] / 画师 聚类重排
-+    val organizeMode = boolPref("organize_mode", false)
+@@ -167,6 +167,10 @@ object Settings : DataStorePreferences(null) {
      val fullscreen = boolPref("fullscreen", true)
      val cutoutShort = boolPref("cutout_short", true)
      val keepScreenOn = boolPref("pref_keep_screen_on_key", true)
++
++    // 整理模式（B6b）：列表页内按 [系列] / 画师 聚类重排
++    val organizeMode = boolPref("organize_mode", false)
++
+     val readerLongTapAction = boolPref("reader_long_tap", true)
+     val pageTransitions = boolPref("pref_enable_transitions_key", true)
+     val readWithVolumeKeys = boolPref("reader_volume_keys", false)
 diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt
 index 72be43ba8..c221bb4b6 100644
 --- a/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt
