@@ -2,6 +2,7 @@ name: Build (legacy pkg)
 
 # 旧包名轨：applicationId = moe.tarsin.ehviefav，versionCode 180062 / versionName 1.13.1-sf
 # 用途：覆盖安装旧版 → 直接读旧数据 / 导出旧库；与旧包同版本号，随时可装回旧包。
+# 只在补丁/脚本变化或手动触发时构建，且只出 arm64-v8a。
 on:
   push:
     branches: [v2/ujui-direct, v2/cai-proxy]
@@ -25,22 +26,21 @@ jobs:
           distribution: temurin
           java-version-file: EhViewer/.java-version
 
-      - name: Install Rust (pinned toolchain) + Android targets
+      - name: Install Rust (pinned toolchain) + Android target
         working-directory: EhViewer
         run: |
           cat rust-toolchain.toml
           rustup show
-          rustup target add aarch64-linux-android armv7-linux-androideabi \
-            thumbv7neon-linux-androideabi x86_64-linux-android
+          rustup target add aarch64-linux-android
 
       - name: Prepare tree (legacy)
         run: bash scripts/prepare-build.sh legacy
 
-      - name: Build release
+      - name: Build release (arm64-v8a only)
         working-directory: EhViewer
-        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
+        run: ./gradlew :app:assembleRelease -PonlyAbi=arm64-v8a --no-daemon --stacktrace
 
       - uses: actions/upload-artifact@v4
         with:
           name: ExViewer-legacy-${{ github.run_number }}
-          path: EhViewer/app/build/outputs/apk/**/*.apk
+          path: EhViewer/app/build/outputs/apk/**/app-default-arm64-v8a-release.apk

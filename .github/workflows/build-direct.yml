@@ -1,6 +1,6 @@
 name: Build (direct)
 
-# 直连版：ujui 基线 + 我的功能补丁
+# 直连版：ujui 基线 + 我的功能补丁（只出 arm64-v8a，够手机用且快）
 on:
   push:
     branches: [v2/ujui-direct, main]
@@ -20,22 +20,21 @@ jobs:
           distribution: temurin
           java-version-file: EhViewer/.java-version   # 基线与上游一致（当前 25）
 
-      - name: Install Rust (pinned toolchain) + Android targets
+      - name: Install Rust (pinned toolchain) + Android target
         working-directory: EhViewer
         run: |
           cat rust-toolchain.toml
           rustup show
-          rustup target add aarch64-linux-android armv7-linux-androideabi \
-            thumbv7neon-linux-androideabi x86_64-linux-android
+          rustup target add aarch64-linux-android
 
       - name: Prepare tree (ujui patches + my patches)
         run: bash scripts/prepare-build.sh direct
 
-      - name: Build release
+      - name: Build release (arm64-v8a only)
         working-directory: EhViewer
-        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
+        run: ./gradlew :app:assembleRelease -PonlyAbi=arm64-v8a --no-daemon --stacktrace
 
       - uses: actions/upload-artifact@v4
         with:
           name: ExViewer-direct-${{ github.run_number }}
-          path: EhViewer/app/build/outputs/apk/**/*.apk
+          path: EhViewer/app/build/outputs/apk/**/app-default-arm64-v8a-release.apk

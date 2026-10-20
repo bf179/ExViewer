@@ -31,17 +31,16 @@ jobs:
         run: |
           cat rust-toolchain.toml
           rustup show
-          rustup target add aarch64-linux-android armv7-linux-androideabi \
-            thumbv7neon-linux-androideabi x86_64-linux-android
+          rustup target add aarch64-linux-android
       - name: Prepare tree (direct)
         run: bash scripts/prepare-build.sh direct
       - name: Build
         working-directory: EhViewer
-        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
+        run: ./gradlew :app:assembleRelease -PonlyAbi=arm64-v8a --no-daemon --stacktrace
       - uses: actions/upload-artifact@v4
         with:
           name: rel-direct
-          path: EhViewer/app/build/outputs/apk/**/*.apk
+          path: EhViewer/app/build/outputs/apk/**/app-default-arm64-v8a-release.apk
 
   cai:
     runs-on: ubuntu-latest
@@ -59,17 +58,16 @@ jobs:
         run: |
           cat rust-toolchain.toml
           rustup show
-          rustup target add aarch64-linux-android armv7-linux-androideabi \
-            thumbv7neon-linux-androideabi x86_64-linux-android
+          rustup target add aarch64-linux-android
       - name: Prepare tree (cai)
         run: bash scripts/prepare-build.sh cai
       - name: Build
         working-directory: EhViewer
-        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
+        run: ./gradlew :app:assembleRelease -PonlyAbi=arm64-v8a --no-daemon --stacktrace
       - uses: actions/upload-artifact@v4
         with:
           name: rel-cai
-          path: EhViewer/app/build/outputs/apk/**/*.apk
+          path: EhViewer/app/build/outputs/apk/**/app-default-arm64-v8a-release.apk
 
   publish:
     needs: [direct, cai]
