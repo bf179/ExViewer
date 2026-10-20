@@ -1,0 +1,286 @@
+diff --git "a/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt" "b/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt"
+index a2b5076be..846c84a2c 100644
+--- "a/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt"
++++ "b/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt"
+@@ -449,4 +449,6 @@ const val BATCH_STATUS_DONE = "完成"
+ const val BATCH_STATUS_FAILED = "失败"
+ const val BATCH_STATUS_INTERRUPTED = "中断"
++const val BATCH_STATUS_QUEUED = "排队中"
++const val BATCH_STATUS_CANCELLED = "已取消"
+ 
+ // app 级作用域：离开列表页 / 切页都不中断
+@@ -456,4 +458,32 @@ object BatchFavController {
+     @Volatile
+     var job: Job? = null
++
++    /** 当前正在执行的任务 id（0 表示空闲） */
++    @Volatile
++    var currentTaskId: Long = 0
++
++    /** 排队等待执行的任务（单实例顺序执行） */
++    private val pending = mutableListOf<Pair<Long, List<BaseGalleryInfo>>>()
++
++    @Synchronized
++    fun enqueue(taskId: Long, items: List<BaseGalleryInfo>) {
++        pending.add(taskId to items)
++    }
++
++    @Synchronized
++    fun poll(): Pair<Long, List<BaseGalleryInfo>>? = pending.removeFirstOrNull()
++
++    @Synchronized
++    fun remove(taskId: Long) {
++        pending.removeAll { it.first == taskId }
++    }
++
++    @Synchronized
++    fun queuedIds(): List<Long> = pending.map { it.first }
++
++    @Synchronized
++    fun hasPending(): Boolean = pending.isNotEmpty()
++
++    fun isBusy(): Boolean = job?.isActive == true
+ }
+ 
+@@ -476,12 +506,41 @@ suspend fun batchModifyFavorite(galleryInfo: BaseGalleryInfo) {
+ 
+ fun startBatchFav(items: List<BaseGalleryInfo>) {
+-    if (BatchFavController.job?.isActive == true) return
+-    BatchFavController.job = batchFavScope.launch {
++    val now = System.currentTimeMillis()
++    batchFavScope.launch {
+         val dao = EhDB.batchFavTaskDao()
+-        val now = System.currentTimeMillis()
+-        val id = dao.insert(
+-            BatchFavTask(status = BATCH_STATUS_RUNNING, total = items.size, done = 0, createdAt = now, updatedAt = now),
+-        )
+-        runBatchFavLoop(items, id, items.size, now)
++        if (BatchFavController.isBusy() || BatchFavController.hasPending()) {
++            val id = dao.insert(
++                BatchFavTask(status = BATCH_STATUS_QUEUED, total = items.size, done = 0, createdAt = now, updatedAt = now),
++            )
++            BatchFavController.enqueue(id, items)
++            batchToast("已加入队列（当前有任务在跑）")
++        } else {
++            val id = dao.insert(
++                BatchFavTask(status = BATCH_STATUS_RUNNING, total = items.size, done = 0, createdAt = now, updatedAt = now),
++            )
++            launchBatch(id, items, items.size, now)
++        }
++    }
++}
++
++/** 启动单个批量任务；结束后自动取队列中的下一个（多任务排队） */
++private fun launchBatch(taskId: Long, items: List<BaseGalleryInfo>, total: Int, createdAt: Long) {
++    BatchFavController.currentTaskId = taskId
++    BatchFavController.job = batchFavScope.launch {
++        try {
++            runBatchFavLoop(items, taskId, total, createdAt)
++        } finally {
++            withContext(NonCancellable) {
++                BatchFavController.currentTaskId = 0
++                val next = BatchFavController.poll()
++                if (next != null) {
++                    val dao = EhDB.batchFavTaskDao()
++                    dao.getById(next.first)?.let {
++                        dao.update(it.copy(status = BATCH_STATUS_RUNNING, updatedAt = System.currentTimeMillis()))
++                    }
++                    launchBatch(next.first, next.second, next.second.size, System.currentTimeMillis())
++                }
++            }
++        }
+     }
+ }
+@@ -489,9 +548,13 @@ fun startBatchFav(items: List<BaseGalleryInfo>) {
+ // 续跑：重置进度重新执行，已收藏者跳过并计入成功（不会重复收藏/误删）
+ fun resumeBatchFav(items: List<BaseGalleryInfo>, task: BatchFavTask) {
+-    if (BatchFavController.job?.isActive == true) return
+-    BatchFavController.job = batchFavScope.launch {
++    batchFavScope.launch {
+         val dao = EhDB.batchFavTaskDao()
+         dao.update(task.copy(status = BATCH_STATUS_RUNNING, done = 0, updatedAt = System.currentTimeMillis()))
+-        runBatchFavLoop(items, task.id, task.total, task.createdAt)
++        if (BatchFavController.isBusy()) {
++            BatchFavController.enqueue(task.id, items)
++            batchToast("已加入队列（当前有任务在跑）")
++        } else {
++            launchBatch(task.id, items, task.total, task.createdAt)
++        }
+     }
+ }
+@@ -502,4 +565,30 @@ fun cancelBatchFav() {
+ }
+ 
++/** 任务中心：取消任务（排队中则移出队列并标记已取消；运行中则中止） */
++fun cancelBatchTask(id: Long) {
++    batchFavScope.launch {
++        val dao = EhDB.batchFavTaskDao()
++        if (BatchFavController.queuedIds().contains(id)) {
++            BatchFavController.remove(id)
++            dao.getById(id)?.let { dao.update(it.copy(status = BATCH_STATUS_CANCELLED, updatedAt = System.currentTimeMillis())) }
++        } else if (BatchFavController.currentTaskId == id) {
++            cancelBatchFav()
++        }
++    }
++}
++
++/** 任务中心：删除任务记录 */
++fun deleteBatchTask(id: Long) {
++    batchFavScope.launch {
++        BatchFavController.remove(id)
++        EhDB.batchFavTaskDao().deleteById(id)
++    }
++}
++
++/** 任务中心：清空已完成任务 */
++fun clearFinishedBatchTasks() {
++    batchFavScope.launch { EhDB.batchFavTaskDao().clearDone() }
++}
++
+ private suspend fun runBatchFavLoop(items: List<BaseGalleryInfo>, taskId: Long, total: Int, createdAt: Long) {
+     val dao = EhDB.batchFavTaskDao()
+diff --git "a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/SyncHideScreen.kt" "b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/SyncHideScreen.kt"
+index 4f683e3e3..81a5c90b0 100644
+--- "a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/SyncHideScreen.kt"
++++ "b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/SyncHideScreen.kt"
+@@ -22,4 +22,5 @@ import com.hippo.ehviewer.collectAsState
+ import com.hippo.ehviewer.ui.Screen
+ import com.hippo.ehviewer.ui.destinations.HideListScreenDestination
++import com.hippo.ehviewer.ui.destinations.TasksScreenDestination
+ import com.hippo.ehviewer.ui.main.NavigationIcon
+ import com.hippo.ehviewer.ui.tools.awaitInputText
+@@ -105,4 +106,8 @@ fun AnimatedVisibilityScope.SyncHideScreen(navigator: DestinationsNavigator) = S
+                 summary = "管理标题 / 上传者 / 标签三类隐藏条目",
+             ) { navigator.navigate(HideListScreenDestination) }
++            Preference(
++                title = "任务中心",
++                summary = "批量收藏等后台任务的进度 / 取消 / 删除（多任务自动排队）",
++            ) { navigator.navigate(TasksScreenDestination) }
+         }
+     }
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/TasksScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/TasksScreen.kt
+new file mode 100644
+--- /dev/null
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/TasksScreen.kt
+@@ -0,0 +1,121 @@
++package com.hippo.ehviewer.ui.settings
++
++import androidx.compose.animation.AnimatedVisibilityScope
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.lazy.LazyColumn
++import androidx.compose.foundation.lazy.items
++import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.filled.Delete
++import androidx.compose.material3.Icon
++import androidx.compose.material3.IconButton
++import androidx.compose.material3.ListItem
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Scaffold
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.material3.TopAppBar
++import androidx.compose.material3.TopAppBarDefaults
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.input.nestedscroll.nestedScroll
++import androidx.compose.ui.unit.dp
++import com.ehviewer.core.database.model.BatchFavTask
++import com.hippo.ehviewer.EhDB
++import com.hippo.ehviewer.collectAsState
++import com.hippo.ehviewer.ui.BATCH_STATUS_CANCELLED
++import com.hippo.ehviewer.ui.BATCH_STATUS_DONE
++import com.hippo.ehviewer.ui.BATCH_STATUS_FAILED
++import com.hippo.ehviewer.ui.BATCH_STATUS_INTERRUPTED
++import com.hippo.ehviewer.ui.BATCH_STATUS_QUEUED
++import com.hippo.ehviewer.ui.BATCH_STATUS_RUNNING
++import com.hippo.ehviewer.ui.Screen
++import com.hippo.ehviewer.ui.cancelBatchTask
++import com.hippo.ehviewer.ui.clearFinishedBatchTasks
++import com.hippo.ehviewer.ui.deleteBatchTask
++import com.hippo.ehviewer.ui.main.NavigationIcon
++import com.ramcosta.composedestinations.annotation.Destination
++import com.ramcosta.composedestinations.annotation.RootGraph
++import com.ramcosta.composedestinations.navigation.DestinationsNavigator
++import java.text.SimpleDateFormat
++import java.util.Date
++import java.util.Locale
++
++/**
++ * 任务中心：批量收藏等后台任务的进度、取消、删除与排队。
++ *
++ * 同一时刻只跑一个批量任务，其余按加入顺序排队（`BatchFavController`）。
++ */
++@Destination<RootGraph>
++@Composable
++fun AnimatedVisibilityScope.TasksScreen(navigator: DestinationsNavigator) = Screen(navigator) {
++    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
++    val tasks by EhDB.batchFavTaskDao().listFlow().collectAsState(emptyList())
++    val timeFormat = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
++
++    Scaffold(
++        topBar = {
++            TopAppBar(
++                title = { Text(text = "任务中心") },
++                navigationIcon = { NavigationIcon() },
++                actions = {
++                    IconButton(onClick = { clearFinishedBatchTasks() }) {
++                        Icon(imageVector = Icons.Default.Delete, contentDescription = "清空已完成")
++                    }
++                },
++                scrollBehavior = scrollBehavior,
++            )
++        },
++    ) { paddingValues ->
++        LazyColumn(
++            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
++            contentPadding = paddingValues,
++        ) {
++            if (tasks.isEmpty()) {
++                item {
++                    Text(
++                        text = "暂无任务。批量收藏时若已有任务在跑，新任务会自动排队。",
++                        modifier = Modifier.padding(24.dp),
++                        style = MaterialTheme.typography.bodyMedium,
++                    )
++                }
++            }
++            items(tasks, key = { it.id }) { task ->
++                TaskRow(task = task, timeText = timeFormat.format(Date(task.createdAt)))
++            }
++        }
++    }
++}
++
++@Composable
++private fun TaskRow(task: BatchFavTask, timeText: String) {
++    val active = task.status == BATCH_STATUS_RUNNING || task.status == BATCH_STATUS_QUEUED
++    ListItem(
++        headlineContent = { Text(text = "批量收藏 · ${task.status}") },
++        supportingContent = {
++            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
++                Text(text = "进度 ${task.done}/${task.total} · $timeText")
++                if (task.status == BATCH_STATUS_CANCELLED || task.status == BATCH_STATUS_FAILED) {
++                    Text(
++                        text = "在画廊列表重新选中条目后批量收藏即可重跑",
++                        style = MaterialTheme.typography.bodySmall,
++                    )
++                }
++            }
++        },
++        trailingContent = {
++            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
++                if (active) {
++                    TextButton(onClick = { cancelBatchTask(task.id) }) { Text(text = "取消") }
++                } else {
++                    TextButton(onClick = { deleteBatchTask(task.id) }) { Text(text = "删除") }
++                }
++            }
++        },
++        modifier = Modifier.fillMaxWidth(),
++    )
++}
