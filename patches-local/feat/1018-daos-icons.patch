@@ -1,0 +1,25 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt b/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt
+index 9c750eb39..8e640aee6 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt
+@@ -65,4 +65,8 @@ object EhDB {
+     }
+ 
++    // 任务中心 / 快速搜索管理（v25/v27）对外 DAO 入口
++    fun batchFavTaskDao() = db.batchFavTaskDao()
++    fun quickSearchDao() = db.quickSearchDao()
++
+     fun getReadProgressFlow(gid: Long) = db.progressDao().getPageFlow(gid)
+     suspend fun getReadProgress(gid: Long) = db.progressDao().getPage(gid)
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
+index abf214417..83fcf3dd1 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
+@@ -31,4 +31,7 @@ import androidx.compose.material.icons.automirrored.filled.Help
+ import androidx.compose.material.icons.automirrored.filled.LastPage
+ import androidx.compose.material.icons.filled.Add
++import androidx.compose.material.icons.filled.FilterAlt
++import androidx.compose.material.icons.filled.Flight
++import androidx.compose.material.icons.filled.Refresh
+ import com.hippo.ehviewer.ui.modifyFavorites
+ import com.ehviewer.core.network.EhCookieStore
