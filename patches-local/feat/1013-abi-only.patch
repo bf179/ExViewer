@@ -28,6 +28,6 @@ index 2a0efd048..99d09bf99 100644
          ndk {
              if (isRelease) {
 -                abiFilters.addAll(supportedAbis)
--                if (onlyAbi == null) abiFilters.addAll(supportedAbis)
++                if (onlyAbi == null) abiFilters.addAll(supportedAbis)
              }
              debugSymbolLevel = "FULL"
