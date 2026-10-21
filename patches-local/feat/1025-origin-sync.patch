@@ -1,0 +1,77 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
+@@ -18,4 +18,10 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
+ import androidx.compose.ui.unit.dp
+ import com.hippo.ehviewer.ExlPrefs
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.setValue
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.withContext
++import com.hippo.ehviewer.client.OriginSyncer
+ import com.hippo.ehviewer.Settings
+ import com.hippo.ehviewer.asMutableState
+@@ -52,4 +58,11 @@ fun AnimatedVisibilityScope.ExlSettingsScreen(navigator: DestinationsNavigator)
+     val papiUrl by Settings.papiUrl.collectAsState()
+     val addKeyword by Settings.addKeyword.collectAsState()
++    var originCount by remember { mutableStateOf(0) }
++
++    // 打开 ExL 页时顺手同步一次来源索引（PQ / 优先订阅 / 已下架 → 本地 gallery_origin）
++    LaunchedEffect(Unit) {
++        withContext(Dispatchers.IO) { runCatching { OriginSyncer.sync() } }
++        originCount = OriginSyncer.count()
++    }
+ 
+     Scaffold(
+@@ -115,4 +128,12 @@ fun AnimatedVisibilityScope.ExlSettingsScreen(navigator: DestinationsNavigator)
+             }
+ 
++            Preference(title = "来源索引", summary = "本地已索引 $originCount 条（PQ / 优先订阅 / 已下架）") {
++                scope.launch {
++                    originCount = withContext(Dispatchers.IO) {
++                        runCatching { OriginSyncer.sync() }.getOrDefault(0)
++                    }
++                }
++            }
++
+             SectionTitle("列表显示（隐藏矩阵）")
+             SwitchPreference(
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/OriginSyncer.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/OriginSyncer.kt
+new file mode 100644
+--- /dev/null
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/OriginSyncer.kt
+@@ -0,0 +1,33 @@
++package com.hippo.ehviewer.client
++
++import com.ehviewer.core.database.model.GalleryOrigin
++import com.hippo.ehviewer.EhDB
++
++/**
++ * 来源索引同步：把服务端 /api origins 拉下来，落到本地 gallery_origin 快捷副本。
++ *
++ * kinds: pq（下载优先） / feed（优先订阅） / expunged（已下架）
++ * 列表过滤（ExlPrefs.hideXxxInList）只读本地这张表，所以必须定期同步一次。
++ */
++object OriginSyncer {
++    suspend fun sync(): Int {
++        val map = ExlClient.origins()
++        if (map.isEmpty()) return 0
++        val merged = LinkedHashMap<Int, MutableSet<String>>()
++        map.forEach { (kind, gids) ->
++            gids.forEach { gid -> merged.getOrPut(gid) { linkedSetOf() }.add(kind) }
++        }
++        if (merged.isEmpty()) return 0
++        val rows = merged.map { (gid, kinds) -> GalleryOrigin(gid, kinds.joinToString(",")) }
++        val dao = EhDB.galleryOriginDao()
++        dao.clear()
++        // 分批写，避免单条 SQL 超过 SQLite 参数上限
++        rows.chunked(500).forEach { dao.insertAll(it) }
++        return rows.size
++    }
++
++    suspend fun count(): Int = EhDB.galleryOriginDao().count()
++
++    suspend fun kindsOf(gid: Int): String = EhDB.galleryOriginDao().kindsOf(gid).orEmpty()
++}
++
