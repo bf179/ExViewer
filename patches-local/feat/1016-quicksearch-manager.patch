@@ -107,13 +107,6 @@ index daad9a6ec..53216dd20 100644
 +            ) { navigate(QuickSearchManagerScreenDestination) }
              Preference(
                  title = stringResource(id = R.string.settings_eh_filter),
-diff --git a/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt b/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
---- a/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
-+++ b/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
-@@ -254,0 +255,3 @@
-+
-+    // 快速搜索智能排序（置顶 → 使用次数 → 最近使用）
-+    val smartQuickSearchSort = boolPref("smart_quick_search_sort", true)
 diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/QuickSearchManagerScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/QuickSearchManagerScreen.kt
 new file mode 100644
 --- /dev/null

@@ -1,0 +1,15 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt b/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
+index 9a2029e81..1e6287bc5 100644
+--- "a/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt"
++++ "b/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt"
+@@ -111,2 +111,10 @@ object Settings : DataStorePreferences(null) {
+     val saveCrashLog = boolPref("save_crash_log", true)
++    // 自有服务端联动（旧版 8f750fe）：收藏同步 SAPI / 优先队列入队 PAPI / 快捷附加关键词
++    val syncFav = boolPref("sync_fav", false)
++    val sapiUrl = stringOrNullPref("sapi_url")
++    val papiUrl = stringOrNullPref("papi_url")
++    val addKeyword = stringOrNullPref("add_keyword")
++
++    // 快速搜索智能排序（置顶 → 使用次数 → 最近使用）
++    val smartQuickSearchSort = boolPref("smart_quick_search_sort", true)
+ 

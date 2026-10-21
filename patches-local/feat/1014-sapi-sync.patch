@@ -1,12 +1,3 @@
-diff --git a/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt b/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
---- a/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
-+++ b/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
-@@ -109,0 +110,5 @@
-+    // 自有服务端联动（旧版 8f750fe）：收藏同步 SAPI / 优先队列入队 PAPI / 快捷附加关键词
-+    val syncFav = boolPref("sync_fav", false)
-+    val sapiUrl = stringOrNullPref("sapi_url")
-+    val papiUrl = stringOrNullPref("papi_url")
-+    val addKeyword = stringOrNullPref("add_keyword")
 diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt
 index 020e6916f..2939c3261 100644
 --- a/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt
