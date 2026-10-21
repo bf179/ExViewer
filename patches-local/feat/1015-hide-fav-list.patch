@@ -1,0 +1,19 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt
+index 2939c3261..818e435e3 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt
+@@ -474,4 +474,5 @@ object EhEngine {
+ 
+     private suspend fun MutableList<BaseGalleryInfo>.fillInfo(url: String, filter: Boolean = false) = with(EhFilter) {
++        val initialCount = size
+         if (filter) removeAllSuspend { filterTitle(it) || filterUploader(it) }
+         // 隐藏列表独立于「过滤」开关，始终生效
+@@ -483,4 +484,8 @@ object EhEngine {
+         if (needApi) fillGalleryListByApi(this@fillInfo, url)
+         if (filter) removeAllSuspend { filterUploader(it) || filterTag(it) || filterTagNamespace(it) || filterTagGroup(it) }
++        // 隐藏已收藏（旧版 HideFav）：仅当本页条目 > 10 时生效，避免小列表被整页清空导致无法继续翻页
++        if (filter && Settings.hideFav.value && initialCount > 10) {
++            removeAllSuspend { it.favoriteSlot != GalleryInfo.NOT_FAVORITED || EhDB.containLocalFavorites(it.gid) }
++        }
+         forEach {
+             if (it.favoriteSlot == GalleryInfo.NOT_FAVORITED && EhDB.containLocalFavorites(it.gid)) {
