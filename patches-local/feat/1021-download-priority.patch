@@ -1,0 +1,639 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/MainActivity.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/MainActivity.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/MainActivity.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/MainActivity.kt
+@@ -140,5 +140,5 @@ import com.hippo.ehviewer.ui.destinations.SignInScreenDestination
+ import com.hippo.ehviewer.ui.destinations.SubscriptionScreenDestination
+ import com.hippo.ehviewer.ui.destinations.ToplistScreenDestination
+-import com.hippo.ehviewer.ui.destinations.PriorityQueueScreenDestination
++import com.hippo.ehviewer.ui.destinations.DownloadPriorityScreenDestination
+ import com.hippo.ehviewer.ui.destinations.WhatshotScreenDestination
+ import com.hippo.ehviewer.ui.screen.asDst
+@@ -177,5 +177,5 @@ private val navItems = arrayOf<Triple<Direction, Int, ImageVector>>(
+     Triple(SubscriptionScreenDestination, R.string.subscription, EhIcons.Default.Subscriptions),
+     Triple(WhatshotScreenDestination, R.string.whats_hot, Icons.Default.Whatshot),
+-    Triple(PriorityQueueScreenDestination, R.string.priority_queue, Icons.Default.QueueMusic),
++    Triple(DownloadPriorityScreenDestination, R.string.priority_queue, Icons.Default.QueueMusic),
+     Triple(ToplistScreenDestination, R.string.toplist, Icons.Default.FormatListNumbered),
+     Triple(FavouritesScreenDestination, R.string.favourite, Icons.Default.Favorite),
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/ExlClient.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/ExlClient.kt
+new file mode 100644
+--- /dev/null
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/ExlClient.kt
+@@ -0,0 +1,204 @@
++package com.hippo.ehviewer.client
++
++import com.hippo.ehviewer.EhApplication
++import com.hippo.ehviewer.Settings
++import io.ktor.client.call.body
++import io.ktor.client.request.header
++import io.ktor.client.request.post
++import io.ktor.client.request.setBody
++import io.ktor.http.ContentType
++import io.ktor.http.content.TextContent
++import kotlinx.serialization.SerialName
++import kotlinx.serialization.Serializable
++import kotlinx.serialization.json.Json
++import kotlinx.serialization.json.JsonObject
++import kotlinx.serialization.json.add
++import kotlinx.serialization.json.buildJsonArray
++import kotlinx.serialization.json.buildJsonObject
++import kotlinx.serialization.json.contentOrNull
++import kotlinx.serialization.json.intOrNull
++import kotlinx.serialization.json.jsonArray
++import kotlinx.serialization.json.jsonObject
++import kotlinx.serialization.json.jsonPrimitive
++import kotlinx.serialization.json.put
++
++/**
++ * ExL 服务端单一端点客户端：POST {base}/api，body 里带 action。
++ *
++ * 设计文档见 EXL-SYSTEM.md §4。旧路径（/pq_galleries 等）保留在服务端做兼容别名。
++ */
++object ExlClient {
++    private val json = Json {
++        ignoreUnknownKeys = true
++        coerceInputValues = true
++        explicitNulls = false
++    }
++
++    /** 从 pq_url（历史配置是 .../pq_galleries）推导出 /api 地址 */
++    fun apiUrl(): String {
++        val raw = Settings.pqUrl.value?.trim().orEmpty()
++        if (raw.isEmpty()) return ""
++        val cut = raw.indexOf("/pq_galleries")
++        val root = if (cut > 0) raw.substring(0, cut) else raw.trimEnd('/')
++        return root.trimEnd('/') + "/api"
++    }
++
++    suspend fun call(action: String, payload: JsonObject = buildJsonObject { }): JsonObject? {
++        val url = apiUrl()
++        if (url.isEmpty()) return null
++        val body = buildJsonObject {
++            put("action", action)
++            payload.forEach { (k, v) -> put(k, v) }
++        }
++        val resp: String = runCatching {
++            EhApplication.ktorClient.post(url) {
++                val token = Settings.apiToken.value
++                if (!token.isNullOrBlank()) header("Authorization", "Bearer $token")
++                setBody(TextContent(body.toString(), ContentType.Application.Json))
++            }.body()
++        }.getOrNull() ?: return null
++        return runCatching { json.parseToJsonElement(resp).jsonObject }.getOrNull()
++    }
++
++    private fun JsonObject.data(): JsonObject? = runCatching { this["data"]!!.jsonObject }.getOrNull()
++
++    // ===== 下载优先队列 =====
++
++    @Serializable
++    data class PriorityItem(
++        val gid: Long = 0,
++        val token: String = "",
++        val title: String? = null,
++        val title_jpn: String? = null,
++        val thumb: String? = null,
++        val category: String? = null,
++        val uploader: String? = null,
++        val posted: Long = 0,
++        val filecount: Int = 0,
++        val filesize: Long = 0,
++        val rating: Float = 0f,
++        val expunged: Int = 0,
++        val fav_status: Int = 0,
++        @SerialName("display_gid") val displayGid: Long = 0,
++        @SerialName("display_token") val displayToken: String = "",
++        val replaced: Boolean = false,
++        @SerialName("downloaded_latest") val downloadedLatest: Int = 0,
++        val isfin: Int = 0,
++        val content: String = "",
++    )
++
++    suspend fun pqList(page: Int, pageSize: Int = 30, sort: String = "added", desc: Boolean = true, hideFav: Boolean): Pair<List<PriorityItem>, Int> {
++        val obj = call("pq_list", buildJsonObject {
++            put("page", page)
++            put("page_size", pageSize)
++            put("sort", sort)
++            put("order", if (desc) "desc" else "asc")
++            put("hide_fav", if (hideFav) 1 else 0)
++        })?.data() ?: return emptyList<PriorityItem>() to 0
++        val items = runCatching {
++            obj["items"]!!.jsonArray.map { json.decodeFromJsonElement(PriorityItem.serializer(), it) }
++        }.getOrDefault(emptyList())
++        val total = runCatching { obj["total"]!!.jsonPrimitive.intOrNull ?: items.size }.getOrDefault(items.size)
++        return items to total
++    }
++
++    suspend fun pqAdd(icontent: String, itype: String = "gallery"): Boolean {
++        val obj = call("pq_add", buildJsonObject {
++            put("itype", itype)
++            put("icontent", icontent)
++        }) ?: return false
++        return obj["ok"]?.jsonPrimitive?.contentOrNull == "true"
++    }
++
++    // ===== 优先订阅 =====
++
++    @Serializable
++    data class FeedItem(
++        val gid: Long = 0,
++        val token: String = "",
++        val title: String? = null,
++        val title_jpn: String? = null,
++        val thumb: String? = null,
++        val category: String? = null,
++        val uploader: String? = null,
++        val posted: Long = 0,
++        val filecount: Int = 0,
++        val filesize: Long = 0,
++        val rating: Float = 0f,
++        val expunged: Int = 0,
++        val fav_status: Int = 0,
++        @SerialName("sub_id") val subId: Int = 0,
++        @SerialName("first_seen_at") val firstSeenAt: String? = null,
++        @SerialName("display_gid") val displayGid: Long = 0,
++        @SerialName("display_token") val displayToken: String = "",
++        val replaced: Boolean = false,
++    )
++
++    suspend fun feedList(page: Int, pageSize: Int = 30, subId: Int? = null, hideFav: Boolean): List<FeedItem> {
++        val obj = call("feed_list", buildJsonObject {
++            put("page", page)
++            put("page_size", pageSize)
++            if (subId != null) put("sub_id", subId)
++            put("hide_fav", if (hideFav) 1 else 0)
++            put("hide_translated", 1)
++        })?.data() ?: return emptyList()
++        return runCatching {
++            obj["items"]!!.jsonArray.map { json.decodeFromJsonElement(FeedItem.serializer(), it) }
++        }.getOrDefault(emptyList())
++    }
++
++    @Serializable
++    data class FeedSub(
++        val id: Int = 0,
++        val kind: String = "pq_tag",
++        val tag: String = "",
++        val enabled: Int = 1,
++        @SerialName("page_limit") val pageLimit: Int = 3,
++        @SerialName("last_run_at") val lastRunAt: String? = null,
++    )
++
++    suspend fun feedSubs(): List<FeedSub> {
++        val obj = call("feed_sub", buildJsonObject { put("op", "list") })?.data()
++        val arr = runCatching { obj!!.jsonArray }.getOrNull() ?: return emptyList()
++        return arr.mapNotNull { runCatching { json.decodeFromJsonElement(FeedSub.serializer(), it) }.getOrNull() }
++    }
++
++    suspend fun feedSubUpsert(kind: String, tag: String, enabled: Boolean = true, pageLimit: Int = 3): Boolean {
++        val obj = call("feed_sub", buildJsonObject {
++            put("op", "upsert")
++            put("kind", kind)
++            put("tag", tag)
++            put("enabled", if (enabled) 1 else 0)
++            put("page_limit", pageLimit)
++        }) ?: return false
++        return obj["ok"]?.jsonPrimitive?.contentOrNull == "true"
++    }
++
++    suspend fun feedSubDelete(id: Int): Boolean {
++        val obj = call("feed_sub", buildJsonObject {
++            put("op", "delete")
++            put("id", id)
++        }) ?: return false
++        return obj["ok"]?.jsonPrimitive?.contentOrNull == "true"
++    }
++
++    // ===== 来源索引 =====
++
++    /** 拉 pq / feed 的 gid 集合，写入本地 gallery_origin 快捷副本。 */
++    suspend fun origins(kinds: List<String> = listOf("pq", "feed", "expunged")): Map<String, List<Int>> {
++        val obj = call("origins", buildJsonObject {
++            put("kinds", buildJsonArray { kinds.forEach { add(it) } })
++        })?.data() ?: return emptyMap()
++        return obj.mapValues { (_, v) ->
++            runCatching { v.jsonArray.mapNotNull { it.jsonPrimitive.intOrNull } }.getOrDefault(emptyList())
++        }
++    }
++
++    // ===== 版本 =====
++
++    suspend fun versionSince(ts: Long): List<JsonObject> {
++        val obj = call("version_since", buildJsonObject { put("ts", ts) })?.data() ?: return emptyList()
++        return runCatching { obj["items"]!!.jsonArray.map { it.jsonObject } }.getOrDefault(emptyList())
++    }
++}
++
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
+new file mode 100644
+--- /dev/null
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
+@@ -0,0 +1,172 @@
++package com.hippo.ehviewer.ui.screen
++
++import androidx.compose.animation.AnimatedVisibilityScope
++import androidx.compose.foundation.clickable
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.lazy.LazyColumn
++import androidx.compose.foundation.lazy.items
++import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.filled.Sort
++import androidx.compose.material.icons.filled.SwapVert
++import androidx.compose.material.icons.filled.Subscriptions
++import androidx.compose.material3.HorizontalDivider
++import androidx.compose.material3.Icon
++import androidx.compose.material3.IconButton
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Scaffold
++import androidx.compose.material3.Text
++import androidx.compose.material3.TopAppBar
++import androidx.compose.material3.TopAppBarDefaults
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateListOf
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.rememberCoroutineScope
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.input.nestedscroll.nestedScroll
++import androidx.compose.ui.text.style.TextOverflow
++import androidx.compose.ui.unit.dp
++import com.hippo.ehviewer.client.ExlClient
++import com.hippo.ehviewer.ui.Screen
++import com.hippo.ehviewer.ui.destinations.FeedSubScreenDestination
++import com.hippo.ehviewer.ui.main.NavigationIcon
++import com.hippo.ehviewer.ui.screen.asDstWith
++import com.ramcosta.composedestinations.annotation.Destination
++import com.ramcosta.composedestinations.annotation.RootGraph
++import com.ramcosta.composedestinations.navigation.DestinationsNavigator
++import kotlinx.coroutines.launch
++
++/**
++ * 下载优先队列页：展示 priority_queue 里的单画廊（你阅读时精选、要优先下载的）。
++ * 排序：加入时间（默认）/ 近期更新；支持正倒序。
++ * 二级入口：优先订阅（feed_item）。
++ */
++@Destination<RootGraph>
++@Composable
++fun AnimatedVisibilityScope.DownloadPriorityScreen(navigator: DestinationsNavigator) = Screen(navigator) {
++    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
++    val scope = rememberCoroutineScope()
++    val items = remember { mutableStateListOf<ExlClient.PriorityItem>() }
++    var page by remember { mutableStateOf(0) }
++    var sortByUpdated by remember { mutableStateOf(false) }
++    var desc by remember { mutableStateOf(true) }
++    var loading by remember { mutableStateOf(false) }
++    var total by remember { mutableStateOf(0) }
++
++    suspend fun load(reset: Boolean) {
++        if (loading) return
++        loading = true
++        val p = if (reset) 0 else page
++        val (list, t) = ExlClient.pqList(
++            page = p,
++            sort = if (sortByUpdated) "updated" else "added",
++            desc = desc,
++            hideFav = false,
++        )
++        if (reset) items.clear()
++        items.addAll(list.filter { new -> items.none { it.gid == new.gid } })
++        total = t
++        page = p + 1
++        loading = false
++    }
++
++    LaunchedEffect(sortByUpdated, desc) { load(reset = true) }
++
++    Scaffold(
++        topBar = {
++            TopAppBar(
++                title = { Text("下载优先 · $total") },
++                navigationIcon = { NavigationIcon() },
++                actions = {
++                    IconButton(onClick = { sortByUpdated = !sortByUpdated }) {
++                        Icon(Icons.Default.Sort, contentDescription = if (sortByUpdated) "按近期更新" else "按加入时间")
++                    }
++                    IconButton(onClick = { desc = !desc }) {
++                        Icon(Icons.Default.SwapVert, contentDescription = if (desc) "倒序" else "正序")
++                    }
++                    IconButton(onClick = { navigator.navigate(FeedSubScreenDestination()) }) {
++                        Icon(Icons.Default.Subscriptions, contentDescription = "优先订阅")
++                    }
++                },
++                scrollBehavior = scrollBehavior,
++            )
++        },
++    ) { padding ->
++        LazyColumn(
++            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
++            contentPadding = padding,
++        ) {
++            item(key = "head") {
++                Text(
++                    text = if (sortByUpdated) "排序：近期更新（${if (desc) "↓" else "↑"}）" else "排序：加入时间（${if (desc) "↓" else "↑"}）",
++                    style = MaterialTheme.typography.labelMedium,
++                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
++                )
++            }
++            items(items, key = { it.gid }) { item ->
++                Column(
++                    modifier = Modifier
++                        .fillMaxWidth()
++                        .clickable { navigator.navigate(item.displayGid asDstWith item.displayToken) }
++                        .padding(horizontal = 16.dp, vertical = 8.dp),
++                    verticalArrangement = Arrangement.spacedBy(2.dp),
++                ) {
++                    Text(
++                        text = item.title ?: item.title_jpn ?: "#${item.gid}",
++                        maxLines = 2,
++                        overflow = TextOverflow.Ellipsis,
++                        style = MaterialTheme.typography.bodyMedium,
++                    )
++                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++                        Text(
++                            text = listOfNotNull(
++                                item.uploader?.takeIf { it.isNotBlank() },
++                                item.category,
++                                "${item.filecount}P",
++                            ).joinToString(" · "),
++                            style = MaterialTheme.typography.bodySmall,
++                            maxLines = 1,
++                            overflow = TextOverflow.Ellipsis,
++                        )
++                    }
++                    val badges = buildList {
++                        if (item.replaced) add("↻ 新版")
++                        if (item.expunged == 1) add("已下架")
++                        if (item.downloadedLatest > 0) add("已下载") else if (item.isfin == 1) add("已下 · 旧版")
++                    }
++                    if (badges.isNotEmpty()) {
++                        Text(
++                            text = badges.joinToString("  "),
++                            style = MaterialTheme.typography.labelSmall,
++                            color = MaterialTheme.colorScheme.primary,
++                        )
++                    }
++                }
++                HorizontalDivider()
++            }
++            item(key = "more") {
++                Row(
++                    modifier = Modifier.fillMaxWidth().padding(16.dp),
++                    horizontalArrangement = Arrangement.Center,
++                    verticalAlignment = Alignment.CenterVertically,
++                ) {
++                    Text(
++                        text = if (loading) "加载中…" else if (items.size >= total) "已全部加载" else "加载更多",
++                        modifier = Modifier.clickable(enabled = !loading && items.size < total) {
++                            scope.launch { load(reset = false) }
++                        },
++                    )
++                }
++            }
++        }
++    }
++}
++
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/FeedSubScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/FeedSubScreen.kt
+new file mode 100644
+--- /dev/null
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/FeedSubScreen.kt
+@@ -0,0 +1,231 @@
++package com.hippo.ehviewer.ui.screen
++
++import androidx.compose.animation.AnimatedVisibilityScope
++import androidx.compose.foundation.clickable
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.lazy.LazyColumn
++import androidx.compose.foundation.lazy.items
++import androidx.compose.foundation.text.input.TextFieldLineLimits
++import androidx.compose.foundation.text.input.rememberTextFieldState
++import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.filled.Add
++import androidx.compose.material.icons.filled.Delete
++import androidx.compose.material.icons.filled.Refresh
++import androidx.compose.material3.AlertDialog
++import androidx.compose.material3.HorizontalDivider
++import androidx.compose.material3.Icon
++import androidx.compose.material3.IconButton
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.OutlinedTextField
++import androidx.compose.material3.Scaffold
++import androidx.compose.material3.Switch
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.material3.TopAppBar
++import androidx.compose.material3.TopAppBarDefaults
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateListOf
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.rememberCoroutineScope
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.input.nestedscroll.nestedScroll
++import androidx.compose.ui.text.style.TextOverflow
++import androidx.compose.ui.unit.dp
++import com.hippo.ehviewer.client.ExlClient
++import com.hippo.ehviewer.ui.Screen
++import com.hippo.ehviewer.ui.main.NavigationIcon
++import com.ramcosta.composedestinations.annotation.Destination
++import com.ramcosta.composedestinations.annotation.RootGraph
++import com.ramcosta.composedestinations.navigation.DestinationsNavigator
++import kotlinx.coroutines.launch
++
++/**
++ * 优先订阅页：下载优先队列里 type=tag 的标签定期抓取结果。
++ * 顶部是订阅管理（开关/删除/新增），下面是新作品流。
++ */
++@Destination<RootGraph>
++@Composable
++fun AnimatedVisibilityScope.FeedSubScreen(navigator: DestinationsNavigator) = Screen(navigator) {
++    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
++    val scope = rememberCoroutineScope()
++    val subs = remember { mutableStateListOf<ExlClient.FeedSub>() }
++    val items = remember { mutableStateListOf<ExlClient.FeedItem>() }
++    var page by remember { mutableStateOf(0) }
++    var loading by remember { mutableStateOf(false) }
++    var showAdd by remember { mutableStateOf(false) }
++
++    suspend fun reloadSubs() {
++        subs.clear()
++        subs.addAll(ExlClient.feedSubs())
++    }
++
++    suspend fun load(reset: Boolean) {
++        if (loading) return
++        loading = true
++        val p = if (reset) 0 else page
++        val list = ExlClient.feedList(page = p, hideFav = true)
++        if (reset) items.clear()
++        items.addAll(list.filter { new -> items.none { it.gid == new.gid } })
++        page = p + 1
++        loading = false
++    }
++
++    LaunchedEffect(Unit) {
++        reloadSubs()
++        load(reset = true)
++    }
++
++    Scaffold(
++        topBar = {
++            TopAppBar(
++                title = { Text("优先订阅") },
++                navigationIcon = { NavigationIcon() },
++                actions = {
++                    IconButton(onClick = { showAdd = true }) {
++                        Icon(Icons.Default.Add, contentDescription = "新增订阅")
++                    }
++                    IconButton(onClick = { scope.launch { reloadSubs(); load(reset = true) } }) {
++                        Icon(Icons.Default.Refresh, contentDescription = "刷新")
++                    }
++                },
++                scrollBehavior = scrollBehavior,
++            )
++        },
++    ) { padding ->
++        LazyColumn(
++            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
++            contentPadding = padding,
++        ) {
++            item(key = "subs_head") {
++                Text(
++                    text = "订阅（${subs.size}）",
++                    style = MaterialTheme.typography.labelMedium,
++                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
++                )
++            }
++            items(subs, key = { "sub_${it.id}" }) { sub ->
++                Row(
++                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
++                    verticalAlignment = Alignment.CenterVertically,
++                    horizontalArrangement = Arrangement.spacedBy(8.dp),
++                ) {
++                    Column(modifier = Modifier.weight(1f)) {
++                        Text(sub.tag, maxLines = 1, overflow = TextOverflow.Ellipsis)
++                        Text(
++                            text = "${sub.kind} · 每页 ${sub.pageLimit} · ${sub.lastRunAt ?: "未跑过"}",
++                            style = MaterialTheme.typography.bodySmall,
++                        )
++                    }
++                    Switch(
++                        checked = sub.enabled == 1,
++                        onCheckedChange = { on ->
++                            scope.launch {
++                                ExlClient.feedSubUpsert(sub.kind, sub.tag, on, sub.pageLimit)
++                                reloadSubs()
++                            }
++                        },
++                    )
++                    IconButton(onClick = {
++                        scope.launch {
++                            ExlClient.feedSubDelete(sub.id)
++                            reloadSubs()
++                        }
++                    }) {
++                        Icon(Icons.Default.Delete, contentDescription = "删除订阅")
++                    }
++                }
++            }
++            item(key = "divider") { HorizontalDivider() }
++            item(key = "items_head") {
++                Text(
++                    text = "新作品（${items.size}）",
++                    style = MaterialTheme.typography.labelMedium,
++                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
++                )
++            }
++            items(items, key = { "f_${it.gid}" }) { item ->
++                Column(
++                    modifier = Modifier
++                        .fillMaxWidth()
++                        .clickable { navigator.navigate(item.displayGid asDstWith item.displayToken) }
++                        .padding(horizontal = 16.dp, vertical = 8.dp),
++                    verticalArrangement = Arrangement.spacedBy(2.dp),
++                ) {
++                    Text(
++                        text = item.title ?: item.title_jpn ?: "#${item.gid}",
++                        maxLines = 2,
++                        overflow = TextOverflow.Ellipsis,
++                        style = MaterialTheme.typography.bodyMedium,
++                    )
++                    Text(
++                        text = listOfNotNull(item.uploader?.takeIf { it.isNotBlank() }, item.category, "${item.filecount}P")
++                            .joinToString(" · "),
++                        style = MaterialTheme.typography.bodySmall,
++                        maxLines = 1,
++                        overflow = TextOverflow.Ellipsis,
++                    )
++                    if (item.replaced || item.expunged == 1) {
++                        Text(
++                            text = buildList {
++                                if (item.replaced) add("↻ 新版")
++                                if (item.expunged == 1) add("已下架")
++                            }.joinToString("  "),
++                            style = MaterialTheme.typography.labelSmall,
++                            color = MaterialTheme.colorScheme.primary,
++                        )
++                    }
++                }
++                HorizontalDivider()
++            }
++            item(key = "more") {
++                Row(
++                    modifier = Modifier.fillMaxWidth().padding(16.dp),
++                    horizontalArrangement = Arrangement.Center,
++                ) {
++                    Text(
++                        text = if (loading) "加载中…" else "加载更多",
++                        modifier = Modifier.clickable(enabled = !loading) { scope.launch { load(false) } },
++                    )
++                }
++            }
++        }
++    }
++
++    if (showAdd) {
++        val tagState = rememberTextFieldState()
++        AlertDialog(
++            onDismissRequest = { showAdd = false },
++            title = { Text("新增订阅标签") },
++            text = {
++                OutlinedTextField(
++                    state = tagState,
++                    label = { Text("标签，如 artist:xxx / group:yyy") },
++                    lineLimits = TextFieldLineLimits.SingleLine,
++                )
++            },
++            confirmButton = {
++                TextButton(onClick = {
++                    val tag = tagState.text.toString().trim()
++                    if (tag.isNotEmpty()) {
++                        scope.launch {
++                            ExlClient.feedSubUpsert("pq_tag", tag)
++                            reloadSubs()
++                            showAdd = false
++                        }
++                    }
++                }) { Text("添加") }
++            },
++            dismissButton = { TextButton(onClick = { showAdd = false }) { Text("取消") } },
++        )
++    }
++}
++
