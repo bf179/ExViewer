@@ -1,0 +1,289 @@
+diff --git a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/model/QuickSearch.kt b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/model/QuickSearch.kt
+index 403da8d42..107ff9d5c 100644
+--- a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/model/QuickSearch.kt
++++ b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/model/QuickSearch.kt
+@@ -41,3 +41,13 @@ data class QuickSearch(
+     @ColumnInfo(name = "HIDE_TYPE", defaultValue = "0")
+     var hideType: Int = 0,
++
++    // v27：快速搜索智能排序 / 置顶
++    @ColumnInfo(name = "USE_COUNT", defaultValue = "0")
++    var useCount: Int = 0,
++
++    @ColumnInfo(name = "LAST_USED_AT", defaultValue = "0")
++    var lastUsedAt: Long = 0,
++
++    @ColumnInfo(name = "PINNED", defaultValue = "0")
++    var pinned: Boolean = false,
+ )
+diff --git a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/dao/QuickSearchDao.kt b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/dao/QuickSearchDao.kt
+index 704147542..2b09ed12e 100644
+--- a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/dao/QuickSearchDao.kt
++++ b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/dao/QuickSearchDao.kt
+@@ -13,4 +13,14 @@ interface QuickSearchDao {
+     suspend fun list(): List<QuickSearch>
+ 
++    /** 智能排序：置顶 → 使用次数 → 最近使用 → 手动顺序 */
++    @Query("SELECT * FROM QUICK_SEARCH ORDER BY PINNED DESC, USE_COUNT DESC, LAST_USED_AT DESC, POSITION")
++    suspend fun listSmart(): List<QuickSearch>
++
++    @Query("UPDATE QUICK_SEARCH SET USE_COUNT = USE_COUNT + 1, LAST_USED_AT = :now WHERE _id = :id")
++    suspend fun touch(id: Long, now: Long)
++
++    @Query("UPDATE QUICK_SEARCH SET PINNED = :pinned WHERE _id = :id")
++    suspend fun setPinned(id: Long, pinned: Boolean)
++
+     @Query("SELECT * FROM QUICK_SEARCH ORDER BY POSITION LIMIT :limit OFFSET :offset")
+     suspend fun list(offset: Int, limit: Int): List<QuickSearch>
+diff --git a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/Database.kt b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/Database.kt
+index 691c0f65f..214d34139 100644
+--- a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/Database.kt
++++ b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/Database.kt
+@@ -43,5 +43,5 @@ import com.ehviewer.core.database.model.SyncOutbox
+         SyncOutbox::class, BatchFavTask::class, PqTag::class,
+     ],
+-    version = 26,
++    version = 27,
+     exportSchema = true,
+     autoMigrations = [
+diff --git a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/DatabaseMigrations.kt b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/DatabaseMigrations.kt
+index a6b0c8fd1..f31cf849b 100644
+--- a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/DatabaseMigrations.kt
++++ b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/DatabaseMigrations.kt
+@@ -158,4 +158,13 @@ class Schema24to25 : Migration(24, 25) {
+ }
+ 
++/** v27：快速搜索智能排序 / 置顶（旧版 8f750fe 无此列，默认 0） */
++class Schema26to27 : Migration(26, 27) {
++    override fun migrate(connection: SQLiteConnection) {
++        connection.execSQL("ALTER TABLE `QUICK_SEARCH` ADD COLUMN `USE_COUNT` INTEGER NOT NULL DEFAULT 0")
++        connection.execSQL("ALTER TABLE `QUICK_SEARCH` ADD COLUMN `LAST_USED_AT` INTEGER NOT NULL DEFAULT 0")
++        connection.execSQL("ALTER TABLE `QUICK_SEARCH` ADD COLUMN `PINNED` INTEGER NOT NULL DEFAULT 0")
++    }
++}
++
+ /** v26：优先队列标签缓存 + 快速搜索隐藏类型 */
+ class Schema25to26 : Migration(25, 26) {
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt b/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt
+index 615939271..9c750eb39 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt
+@@ -26,4 +26,5 @@ import com.ehviewer.core.database.Schema23to24
+ import com.ehviewer.core.database.Schema24to25
+ import com.ehviewer.core.database.Schema25to26
++import com.ehviewer.core.database.Schema26to27
+ import com.ehviewer.core.database.getDatabasePath
+ import com.ehviewer.core.database.model.DownloadArtist
+@@ -49,5 +50,5 @@ object EhDB {
+     private const val DB_NAME = "eh.db"
+     private val db = roomDb<EhDatabase>(DB_NAME) {
+-        addMigrations(Schema17to18(), Schema23to24(), Schema24to25(), Schema25to26())
++        addMigrations(Schema17to18(), Schema23to24(), Schema24to25(), Schema25to26(), Schema26to27())
+     }
+ 
+@@ -303,5 +304,5 @@ object EhDB {
+         val oldDB = resource {
+             roomDb<EhDatabase>(tempDBName) {
+-                addMigrations(Schema17to18(), Schema23to24(), Schema24to25(), Schema25to26())
++                addMigrations(Schema17to18(), Schema23to24(), Schema24to25(), Schema25to26(), Schema26to27())
+             }
+         } release { db ->
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/EhScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/EhScreen.kt
+index daad9a6ec..53216dd20 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/EhScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/EhScreen.kt
+@@ -40,4 +40,5 @@ import com.hippo.ehviewer.collectAsState
+ import com.hippo.ehviewer.ui.Screen
+ import com.hippo.ehviewer.ui.destinations.FilterScreenDestination
++import com.hippo.ehviewer.ui.destinations.QuickSearchManagerScreenDestination
+ import com.hippo.ehviewer.ui.destinations.SyncHideScreenDestination
+ import com.hippo.ehviewer.ui.destinations.MyTagsScreenDestination
+@@ -251,4 +252,8 @@ fun AnimatedVisibilityScope.EhScreen(navigator: DestinationsNavigator) = Screen(
+                 )
+             }
++            Preference(
++                title = "快速搜索管理",
++                summary = "搜索定位 / 智能排序 / 置顶 / 智能分类 / 删除",
++            ) { navigate(QuickSearchManagerScreenDestination) }
+             Preference(
+                 title = stringResource(id = R.string.settings_eh_filter),
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt b/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/Settings.kt
+@@ -254,0 +255,3 @@
++
++    // 快速搜索智能排序（置顶 → 使用次数 → 最近使用）
++    val smartQuickSearchSort = boolPref("smart_quick_search_sort", true)
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/QuickSearchManagerScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/QuickSearchManagerScreen.kt
+new file mode 100644
+--- /dev/null
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/QuickSearchManagerScreen.kt
+@@ -0,0 +1,168 @@
++package com.hippo.ehviewer.ui.settings
++
++import androidx.compose.animation.AnimatedVisibilityScope
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.lazy.LazyColumn
++import androidx.compose.foundation.lazy.items
++import androidx.compose.foundation.text.input.TextFieldLineLimits
++import androidx.compose.foundation.text.input.rememberTextFieldState
++import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.filled.Delete
++import androidx.compose.material.icons.filled.PushPin
++import androidx.compose.material3.Icon
++import androidx.compose.material3.IconButton
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.OutlinedTextField
++import androidx.compose.material3.Scaffold
++import androidx.compose.material3.Text
++import androidx.compose.material3.TopAppBar
++import androidx.compose.material3.TopAppBarDefaults
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateListOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.rememberCoroutineScope
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.input.nestedscroll.nestedScroll
++import androidx.compose.ui.text.style.TextOverflow
++import androidx.compose.ui.unit.dp
++import com.ehviewer.core.database.model.QuickSearch
++import com.hippo.ehviewer.EhDB
++import com.hippo.ehviewer.Settings
++import com.hippo.ehviewer.asMutableState
++import com.hippo.ehviewer.collectAsState
++import com.hippo.ehviewer.ui.Screen
++import com.hippo.ehviewer.ui.main.NavigationIcon
++import com.ramcosta.composedestinations.annotation.Destination
++import com.ramcosta.composedestinations.annotation.RootGraph
++import com.ramcosta.composedestinations.navigation.DestinationsNavigator
++import kotlinx.coroutines.launch
++import me.zhanghai.compose.preference.SwitchPreference
++
++/**
++ * 快速搜索管理：
++ * - 搜索定位（按名称 / 关键词过滤）
++ * - 智能排序（置顶 → 使用次数 → 最近使用；关闭则按手动顺序）
++ * - 置顶 / 取消置顶、删除
++ * - 智能分类（按搜索模式分组显示）
++ */
++@Destination<RootGraph>
++@Composable
++fun AnimatedVisibilityScope.QuickSearchManagerScreen(navigator: DestinationsNavigator) = Screen(navigator) {
++    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
++    val scope = rememberCoroutineScope()
++    val all = remember { mutableStateListOf<QuickSearch>() }
++    val filter = rememberTextFieldState()
++    val smartSort by Settings.smartQuickSearchSort.collectAsState()
++    val query = filter.text.toString().trim()
++
++    suspend fun reload() {
++        val list = if (smartSort) {
++            EhDB.quickSearchDao().listSmart()
++        } else {
++            EhDB.quickSearchDao().list()
++        }
++        all.clear()
++        all.addAll(list)
++    }
++
++    LaunchedEffect(smartSort) { reload() }
++
++    val shown = if (query.isBlank()) {
++        all.toList()
++    } else {
++        all.filter { it.name.contains(query, true) || (it.keyword ?: "").contains(query, true) }
++    }
++    val grouped = shown.groupBy { modeLabel(it.mode) }
++
++    Scaffold(
++        topBar = {
++            TopAppBar(
++                title = { Text(text = "快速搜索管理") },
++                navigationIcon = { NavigationIcon() },
++                scrollBehavior = scrollBehavior,
++            )
++        },
++    ) { paddingValues ->
++        LazyColumn(
++            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
++            contentPadding = paddingValues,
++        ) {
++            item(key = "smart") {
++                SwitchPreference(
++                    title = "智能排序",
++                    summary = "置顶优先，其次按使用次数与最近使用时间",
++                    state = Settings.smartQuickSearchSort.asMutableState(),
++                )
++            }
++            item(key = "search") {
++                OutlinedTextField(
++                    state = filter,
++                    label = { Text(text = "搜索定位") },
++                    lineLimits = TextFieldLineLimits.SingleLine,
++                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
++                )
++            }
++            grouped.forEach { (label, list) ->
++                item(key = "h_$label") {
++                    Text(
++                        text = label,
++                        style = MaterialTheme.typography.titleSmall,
++                        modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
++                    )
++                }
++                items(list, key = { it.id ?: it.name.hashCode().toLong() }) { q ->
++                    Row(
++                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
++                        verticalAlignment = Alignment.CenterVertically,
++                    ) {
++                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
++                            Text(text = q.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
++                            Text(
++                                text = "${q.keyword.orEmpty()} · 用过 ${q.useCount} 次" +
++                                    if (q.pinned) " · 已置顶" else "",
++                                style = MaterialTheme.typography.bodySmall,
++                                maxLines = 1,
++                                overflow = TextOverflow.Ellipsis,
++                            )
++                        }
++                        IconButton(onClick = {
++                            scope.launch {
++                                q.id?.let { EhDB.quickSearchDao().setPinned(it, !q.pinned) }
++                                reload()
++                            }
++                        }) {
++                            Icon(imageVector = Icons.Default.PushPin, contentDescription = if (q.pinned) "取消置顶" else "置顶")
++                        }
++                        IconButton(onClick = {
++                            scope.launch {
++                                EhDB.deleteQuickSearch(q)
++                                reload()
++                            }
++                        }) {
++                            Icon(imageVector = Icons.Default.Delete, contentDescription = "删除")
++                        }
++                    }
++                }
++            }
++            if (shown.isEmpty()) {
++                item { Text(text = "没有匹配的快速搜索", modifier = Modifier.padding(24.dp)) }
++            }
++        }
++    }
++}
++
++private fun modeLabel(mode: Int): String = when (mode) {
++    0 -> "普通搜索"
++    1 -> "标签搜索"
++    2 -> "上传者搜索"
++    3 -> "订阅"
++    else -> "其他"
++}
++
