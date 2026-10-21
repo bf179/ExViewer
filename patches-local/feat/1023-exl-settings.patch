@@ -1,0 +1,265 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt
+@@ -28,4 +28,5 @@ import com.ehviewer.core.network.EhCookieStore
+ import com.ehviewer.core.util.logcat
+ import com.hippo.ehviewer.EhDB
++import com.hippo.ehviewer.ExlPrefs
+ import com.hippo.ehviewer.Settings
+ import com.hippo.ehviewer.client.data.FavListUrlBuilder
+@@ -488,4 +489,13 @@ object EhEngine {
+             removeAllSuspend { it.favoriteSlot != GalleryInfo.NOT_FAVORITED || EhDB.containLocalFavorites(it.gid) }
+         }
++        // 来源隐藏（列表显示矩阵）：PQ / 优先订阅 / 关注，用本地 gallery_origin 快捷副本判定
++        if (filter) {
++            removeAllSuspend {
++                val kinds = EhDB.galleryOriginDao().kindsOf(it.gid.toInt()).orEmpty()
++                (ExlPrefs.hidePqInList.value && kinds.contains("pq")) ||
++                    (ExlPrefs.hideFeedInList.value && kinds.contains("feed")) ||
++                    (ExlPrefs.hideWatchInList.value && kinds.contains("watch"))
++            }
++        }
+         forEach {
+             if (it.favoriteSlot == GalleryInfo.NOT_FAVORITED && EhDB.containLocalFavorites(it.gid)) {
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/EhScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/EhScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/EhScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/EhScreen.kt
+@@ -39,4 +39,5 @@ import com.hippo.ehviewer.client.EhUtils
+ import com.hippo.ehviewer.collectAsState
+ import com.hippo.ehviewer.ui.Screen
++import com.hippo.ehviewer.ui.destinations.ExlSettingsScreenDestination
+ import com.hippo.ehviewer.ui.destinations.FilterScreenDestination
+ import com.hippo.ehviewer.ui.destinations.QuickSearchManagerScreenDestination
+@@ -252,4 +253,8 @@ fun AnimatedVisibilityScope.EhScreen(navigator: DestinationsNavigator) = Screen(
+                 )
+             }
++            Preference(
++                title = "ExL 增强",
++                summary = "服务端 / 屏蔽与过滤 / 列表显示 / 关注与订阅 / 工具",
++            ) { navigate(ExlSettingsScreenDestination) }
+             Preference(
+                 title = "快速搜索管理",
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
+new file mode 100644
+--- /dev/null
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
+@@ -0,0 +1,177 @@
++package com.hippo.ehviewer.ui.settings
++
++import androidx.compose.animation.AnimatedVisibilityScope
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.rememberScrollState
++import androidx.compose.foundation.verticalScroll
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Scaffold
++import androidx.compose.material3.Text
++import androidx.compose.material3.TopAppBar
++import androidx.compose.material3.TopAppBarDefaults
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.rememberCoroutineScope
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.input.nestedscroll.nestedScroll
++import androidx.compose.ui.unit.dp
++import com.hippo.ehviewer.ExlPrefs
++import com.hippo.ehviewer.Settings
++import com.hippo.ehviewer.asMutableState
++import com.hippo.ehviewer.collectAsState
++import com.hippo.ehviewer.ui.Screen
++import com.hippo.ehviewer.ui.destinations.FeedSubScreenDestination
++import com.hippo.ehviewer.ui.destinations.FilterScreenDestination
++import com.hippo.ehviewer.ui.destinations.HideListScreenDestination
++import com.hippo.ehviewer.ui.destinations.QuickSearchManagerScreenDestination
++import com.hippo.ehviewer.ui.destinations.TasksScreenDestination
++import com.hippo.ehviewer.ui.destinations.WatchListScreenDestination
++import com.hippo.ehviewer.ui.main.NavigationIcon
++import com.hippo.ehviewer.ui.tools.awaitInputText
++import com.ramcosta.composedestinations.annotation.Destination
++import com.ramcosta.composedestinations.annotation.RootGraph
++import com.ramcosta.composedestinations.navigation.DestinationsNavigator
++import kotlinx.coroutines.launch
++import me.zhanghai.compose.preference.Preference
++import me.zhanghai.compose.preference.SwitchPreference
++
++/**
++ * ExL 增强：自有功能的单页收口。
++ * 分区：服务端 / 屏蔽与过滤（含列表显示矩阵）/ 关注与订阅 / 工具。
++ */
++@Destination<RootGraph>
++@Composable
++fun AnimatedVisibilityScope.ExlSettingsScreen(navigator: DestinationsNavigator) = Screen(navigator) {
++    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
++    val scope = rememberCoroutineScope()
++
++    val pqUrl by Settings.pqUrl.collectAsState()
++    val apiToken by Settings.apiToken.collectAsState()
++    val sapiUrl by Settings.sapiUrl.collectAsState()
++    val papiUrl by Settings.papiUrl.collectAsState()
++    val addKeyword by Settings.addKeyword.collectAsState()
++
++    Scaffold(
++        topBar = {
++            TopAppBar(
++                title = { Text("ExL 增强") },
++                navigationIcon = { NavigationIcon() },
++                scrollBehavior = scrollBehavior,
++            )
++        },
++    ) { padding ->
++        Column(
++            modifier = Modifier
++                .verticalScroll(rememberScrollState())
++                .padding(padding),
++        ) {
++            SectionTitle("服务端")
++            Preference(title = "服务端地址", summary = pqUrl ?: "未设置") {
++                scope.launch {
++                    val input = awaitInputText(initial = pqUrl.orEmpty(), title = "服务端地址", hint = "https://exl.loliwant.cc")
++                    Settings.pqUrl.value = input.trim().ifBlank { null }
++                }
++            }
++            Preference(title = "API Token", summary = apiToken?.let { "已配置 (${it.take(4)}…)" } ?: "未设置") {
++                scope.launch {
++                    val input = awaitInputText(initial = apiToken.orEmpty(), title = "API Token", hint = "留空表示服务端不鉴权")
++                    Settings.apiToken.value = input.trim().ifBlank { null }
++                }
++            }
++            SwitchPreference(
++                title = "同步收藏到服务端",
++                summary = "收藏 / 取消收藏后上报，让下载器知道该下什么",
++                state = Settings.syncFav.asMutableState(),
++            )
++            Preference(title = "SAPI 地址", summary = sapiUrl ?: "未设置") {
++                scope.launch {
++                    val input = awaitInputText(initial = sapiUrl.orEmpty(), title = "SAPI 地址")
++                    Settings.sapiUrl.value = input.trim().ifBlank { null }
++                }
++            }
++            Preference(title = "PAPI 地址", summary = papiUrl ?: "未设置") {
++                scope.launch {
++                    val input = awaitInputText(initial = papiUrl.orEmpty(), title = "PAPI 地址")
++                    Settings.papiUrl.value = input.trim().ifBlank { null }
++                }
++            }
++            Preference(title = "快捷附加关键词", summary = addKeyword ?: "未设置") {
++                scope.launch {
++                    val input = awaitInputText(initial = addKeyword.orEmpty(), title = "快捷附加关键词")
++                    Settings.addKeyword.value = input.trim().ifBlank { null }
++                }
++            }
++
++            SectionTitle("屏蔽与过滤")
++            Preference(title = "屏蔽规则（过滤）", summary = "标题 / 上传者 / 标签 / 复合标签 …") {
++                navigator.navigate(FilterScreenDestination())
++            }
++            Preference(title = "隐藏规则", summary = "跨端同步的隐藏列表") {
++                navigator.navigate(HideListScreenDestination())
++            }
++            Preference(title = "关注列表", summary = "被关注的作者 / 社团 / 标签 / 标题") {
++                navigator.navigate(WatchListScreenDestination())
++            }
++
++            SectionTitle("列表显示（隐藏矩阵）")
++            SwitchPreference(
++                title = "普通列表隐藏「下载优先」画廊",
++                state = ExlPrefs.hidePqInList.asMutableState(),
++            )
++            SwitchPreference(
++                title = "普通列表隐藏「优先订阅」画廊",
++                state = ExlPrefs.hideFeedInList.asMutableState(),
++            )
++            SwitchPreference(
++                title = "普通列表隐藏「关注」画廊",
++                state = ExlPrefs.hideWatchInList.asMutableState(),
++            )
++            SwitchPreference(
++                title = "普通列表隐藏已收藏",
++                summary = "仅在本页条目 > 10 时生效，避免整页清空",
++                state = Settings.hideFav.asMutableState(),
++            )
++            SwitchPreference(
++                title = "历史记录隐藏「下载优先」画廊",
++                state = ExlPrefs.hidePqInHistory.asMutableState(),
++            )
++            SwitchPreference(
++                title = "历史记录隐藏「优先订阅」画廊",
++                state = ExlPrefs.hideFeedInHistory.asMutableState(),
++            )
++            SwitchPreference(
++                title = "历史记录隐藏「关注」画廊",
++                state = ExlPrefs.hideWatchInHistory.asMutableState(),
++            )
++            SwitchPreference(
++                title = "历史记录隐藏已收藏",
++                state = Settings.hideFavInHistory.asMutableState(),
++            )
++
++            SectionTitle("关注与订阅")
++            Preference(title = "优先订阅", summary = "下载优先队列里标签类型抓取的新作品") {
++                navigator.navigate(FeedSubScreenDestination())
++            }
++
++            SectionTitle("工具")
++            Preference(title = "任务中心", summary = "批量收藏等任务的进度 / 取消 / 排队") {
++                navigator.navigate(TasksScreenDestination())
++            }
++            Preference(title = "快速搜索管理", summary = "搜索定位 / 智能排序 / 置顶 / 分类") {
++                navigator.navigate(QuickSearchManagerScreenDestination())
++            }
++        }
++    }
++}
++
++@Composable
++private fun SectionTitle(text: String) {
++    Text(
++        text = text,
++        style = MaterialTheme.typography.titleSmall,
++        color = MaterialTheme.colorScheme.primary,
++        modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp),
++    )
++}
++
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ExlPrefs.kt b/app/src/main/kotlin/com/hippo/ehviewer/ExlPrefs.kt
+new file mode 100644
+--- /dev/null
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ExlPrefs.kt
+@@ -0,0 +1,37 @@
++package com.hippo.ehviewer
++
++import com.ehviewer.core.preferences.DataStorePreferences
++
++/**
++ * ExL 自有偏好项（不写进 Settings，避免每次补丁都动同一个大文件）。
++ *
++ * 分组：
++ * - 列表显示矩阵：来源（下载优先 / 优先订阅 / 关注）× 列表（普通列表 / 历史）
++ * - 版本与订阅行为
++ */
++object ExlPrefs : DataStorePreferences(null) {
++    // ===== 列表显示矩阵 =====
++    val hidePqInList = boolPref("hide_pq_in_list", true)
++    val hideFeedInList = boolPref("hide_feed_in_list", true)
++    val hideWatchInList = boolPref("hide_watch_in_list", false)
++
++    val hidePqInHistory = boolPref("hide_pq_in_history", false)
++    val hideFeedInHistory = boolPref("hide_feed_in_history", false)
++    val hideWatchInHistory = boolPref("hide_watch_in_history", false)
++
++    // ===== 下载优先页 =====
++    val pqSortByUpdated = boolPref("pq_sort_by_updated", false)
++    val pqSortDesc = boolPref("pq_sort_desc", true)
++    val pqHideFav = boolPref("pq_hide_fav", false)
++
++    // ===== 优先订阅页 =====
++    val feedHideFav = boolPref("feed_hide_fav", true)
++    val feedHideTranslated = boolPref("feed_hide_translated", true)
++
++    // ===== 版本迁移 =====
++    // 本地收藏跟随新版：发现 current_gid 变化时把收藏行复制到新 gid
++    val followRenamedFav = boolPref("follow_renamed_fav", true)
++    // 已有下载发现新版时的策略：only-notify / auto-redownload / ignore
++    val renamedDownloadPolicy = stringPref("renamed_download_policy", "only-notify")
++}
++
