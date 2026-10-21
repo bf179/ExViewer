@@ -1,0 +1,425 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/MainActivity.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/MainActivity.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/MainActivity.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/MainActivity.kt
+@@ -53,4 +53,5 @@ import androidx.compose.material.icons.filled.History
+ import androidx.compose.material.icons.filled.Home
+ import androidx.compose.material.icons.filled.Settings
++import androidx.compose.material.icons.filled.Star
+ import androidx.compose.material.icons.filled.Whatshot
+ import androidx.compose.material.icons.filled.QueueMusic
+@@ -141,4 +142,5 @@ import com.hippo.ehviewer.ui.destinations.SubscriptionScreenDestination
+ import com.hippo.ehviewer.ui.destinations.ToplistScreenDestination
+ import com.hippo.ehviewer.ui.destinations.DownloadPriorityScreenDestination
++import com.hippo.ehviewer.ui.destinations.WatchFeedScreenDestination
+ import com.hippo.ehviewer.ui.destinations.WhatshotScreenDestination
+ import com.hippo.ehviewer.ui.screen.asDst
+@@ -178,4 +180,5 @@ private val navItems = arrayOf<Triple<Direction, Int, ImageVector>>(
+     Triple(WhatshotScreenDestination, R.string.whats_hot, Icons.Default.Whatshot),
+     Triple(DownloadPriorityScreenDestination, R.string.priority_queue, Icons.Default.QueueMusic),
++    Triple(WatchFeedScreenDestination, R.string.watch_list, Icons.Default.Star),
+     Triple(ToplistScreenDestination, R.string.toplist, Icons.Default.FormatListNumbered),
+     Triple(FavouritesScreenDestination, R.string.favourite, Icons.Default.Favorite),
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt b/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt
+@@ -67,4 +67,7 @@ object EhDB {
+ 
+     fun quickSearchDao() = db.quickSearchDao()
++    fun watchItemDao() = db.watchItemDao()
++    fun galleryOriginDao() = db.galleryOriginDao()
++    fun galleryVersionDao() = db.galleryVersionDao()
+ 
+     fun getReadProgressFlow(gid: Long) = db.progressDao().getPageFlow(gid)
+diff --git a/core/i18n/src/commonMain/moko-resources/base/strings.xml b/core/i18n/src/commonMain/moko-resources/base/strings.xml
+--- a/core/i18n/src/commonMain/moko-resources/base/strings.xml
++++ b/core/i18n/src/commonMain/moko-resources/base/strings.xml
+@@ -641,3 +641,4 @@
+     <string name="show_blocked_image">Show blocked image</string>
+     <!-- Tachiyomi Reader End-->
++    <string name="watch_list">Watch</string>
+ </resources>
+diff --git a/core/i18n/src/commonMain/moko-resources/zh-rCN/strings.xml b/core/i18n/src/commonMain/moko-resources/zh-rCN/strings.xml
+--- a/core/i18n/src/commonMain/moko-resources/zh-rCN/strings.xml
++++ b/core/i18n/src/commonMain/moko-resources/zh-rCN/strings.xml
+@@ -623,3 +623,4 @@
+     <string name="show_blocked_image">显示已屏蔽的图片</string>
+     <!-- Tachiyomi Reader End-->
++    <string name="watch_list">关注</string>
+ </resources>
+\ No newline at end of file
+diff --git a/core/i18n/src/commonMain/moko-resources/zh-rHK/strings.xml b/core/i18n/src/commonMain/moko-resources/zh-rHK/strings.xml
+--- a/core/i18n/src/commonMain/moko-resources/zh-rHK/strings.xml
++++ b/core/i18n/src/commonMain/moko-resources/zh-rHK/strings.xml
+@@ -500,3 +500,4 @@
+     <string name="disabled_nav">停用</string>
+     <!-- Tachiyomi Reader End-->
++    <string name="watch_list">關注</string>
+ </resources>
+diff --git a/core/i18n/src/commonMain/moko-resources/zh-rTW/strings.xml b/core/i18n/src/commonMain/moko-resources/zh-rTW/strings.xml
+--- a/core/i18n/src/commonMain/moko-resources/zh-rTW/strings.xml
++++ b/core/i18n/src/commonMain/moko-resources/zh-rTW/strings.xml
+@@ -599,3 +599,4 @@
+     <string name="pref_crop_borders">邊緣裁剪</string>
+     <!-- Tachiyomi Reader End-->
++    <string name="watch_list">關注</string>
+ </resources>
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/WatchFeedScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/WatchFeedScreen.kt
+new file mode 100644
+--- /dev/null
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/WatchFeedScreen.kt
+@@ -0,0 +1,140 @@
++package com.hippo.ehviewer.ui.screen
++
++import androidx.compose.animation.AnimatedVisibilityScope
++import androidx.compose.foundation.clickable
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.lazy.LazyColumn
++import androidx.compose.foundation.lazy.items
++import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.filled.Settings
++import androidx.compose.material3.HorizontalDivider
++import androidx.compose.material3.Icon
++import androidx.compose.material3.IconButton
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Scaffold
++import androidx.compose.material3.Text
++import androidx.compose.material3.TopAppBar
++import androidx.compose.material3.TopAppBarDefaults
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.mutableStateListOf
++import androidx.compose.runtime.remember
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.input.nestedscroll.nestedScroll
++import androidx.compose.ui.text.style.TextOverflow
++import androidx.compose.ui.unit.dp
++import com.ehviewer.core.database.model.WatchItem
++import com.hippo.ehviewer.EhDB
++import com.hippo.ehviewer.client.data.ListUrlBuilder
++import com.hippo.ehviewer.ui.Screen
++import com.hippo.ehviewer.ui.destinations.WatchListScreenDestination
++import com.hippo.ehviewer.ui.main.NavigationIcon
++import com.hippo.ehviewer.ui.screen.asDst
++import com.ramcosta.composedestinations.annotation.Destination
++import com.ramcosta.composedestinations.annotation.RootGraph
++import com.ramcosta.composedestinations.navigation.DestinationsNavigator
++
++/**
++ * 关注页：展示已启用的关注项（艺术家 / 社团 / 标签 / 标题 / 其他），
++ * 点一条即按对应语法打开站点搜索。管理入口在右上角。
++ */
++@Destination<RootGraph>
++@Composable
++fun AnimatedVisibilityScope.WatchFeedScreen(navigator: DestinationsNavigator) = Screen(navigator) {
++    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
++    val items = remember { mutableStateListOf<WatchItem>() }
++
++    LaunchedEffect(Unit) {
++        items.clear()
++        items.addAll(EhDB.watchItemDao().listEnabled())
++    }
++
++    Scaffold(
++        topBar = {
++            TopAppBar(
++                title = { Text("关注 · ${items.size}") },
++                navigationIcon = { NavigationIcon() },
++                actions = {
++                    IconButton(onClick = { navigator.navigate(WatchListScreenDestination()) }) {
++                        Icon(Icons.Default.Settings, contentDescription = "关注列表管理")
++                    }
++                },
++                scrollBehavior = scrollBehavior,
++            )
++        },
++    ) { padding ->
++        LazyColumn(
++            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
++            contentPadding = padding,
++        ) {
++            items.groupBy { it.kind }.forEach { (kind, list) ->
++                item(key = "h_$kind") {
++                    Text(
++                        text = kindLabel(kind) + "（${list.size}）",
++                        style = MaterialTheme.typography.labelMedium,
++                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
++                    )
++                }
++                items(list, key = { "${it.kind}_${it.content}" }) { w ->
++                    Column(
++                        modifier = Modifier
++                            .fillMaxWidth()
++                            .clickable {
++                                val builder = ListUrlBuilder().apply {
++                                    keyword = watchKeyword(w)
++                                }
++                                navigator.navigate(builder.asDst())
++                            }
++                            .padding(horizontal = 16.dp, vertical = 10.dp),
++                        verticalArrangement = Arrangement.spacedBy(2.dp),
++                    ) {
++                        Text(w.content, maxLines = 1, overflow = TextOverflow.Ellipsis)
++                        Text(
++                            text = watchKeyword(w) + (w.note?.let { " · $it" } ?: ""),
++                            style = MaterialTheme.typography.bodySmall,
++                            maxLines = 1,
++                            overflow = TextOverflow.Ellipsis,
++                        )
++                    }
++                    HorizontalDivider()
++                }
++            }
++            if (items.isEmpty()) {
++                item {
++                    Text(
++                        text = "还没有关注项。可在搜索结果页或标签长按菜单里添加。",
++                        modifier = Modifier.padding(24.dp),
++                        style = MaterialTheme.typography.bodyMedium,
++                    )
++                }
++            }
++            item(key = "tip") {
++                Text(
++                    text = "提示：把常看的作者/社团加进来，比塞满快速搜索更清爽。",
++                    modifier = Modifier.padding(16.dp),
++                    style = MaterialTheme.typography.labelSmall,
++                )
++            }
++        }
++    }
++}
++
++internal fun kindLabel(kind: String): String = when (kind) {
++    "artist" -> "艺术家"
++    "circle" -> "社团"
++    "tag" -> "标签"
++    "title" -> "标题"
++    else -> "其他"
++}
++
++internal fun watchKeyword(item: WatchItem): String = when (item.kind) {
++    "artist" -> "artist:${item.content}"
++    "circle" -> "group:${item.content}"
++    "title" -> "\"${item.content}\""
++    else -> item.content
++}
++
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/WatchListScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/WatchListScreen.kt
+new file mode 100644
+--- /dev/null
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/WatchListScreen.kt
+@@ -0,0 +1,210 @@
++package com.hippo.ehviewer.ui.settings
++
++import androidx.compose.animation.AnimatedVisibilityScope
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.lazy.LazyColumn
++import androidx.compose.foundation.lazy.items
++import androidx.compose.foundation.text.input.TextFieldLineLimits
++import androidx.compose.foundation.text.input.rememberTextFieldState
++import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.filled.Add
++import androidx.compose.material.icons.filled.Delete
++import androidx.compose.material3.AlertDialog
++import androidx.compose.material3.AssistChip
++import androidx.compose.material3.FilterChip
++import androidx.compose.material3.HorizontalDivider
++import androidx.compose.material3.Icon
++import androidx.compose.material3.IconButton
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.OutlinedTextField
++import androidx.compose.material3.Scaffold
++import androidx.compose.material3.Switch
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.material3.TopAppBar
++import androidx.compose.material3.TopAppBarDefaults
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateListOf
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.rememberCoroutineScope
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.input.nestedscroll.nestedScroll
++import androidx.compose.ui.text.style.TextOverflow
++import androidx.compose.ui.unit.dp
++import com.ehviewer.core.database.model.WatchItem
++import com.hippo.ehviewer.EhDB
++import com.hippo.ehviewer.ui.Screen
++import com.hippo.ehviewer.ui.destinations.WatchFeedScreenDestination
++import com.hippo.ehviewer.ui.main.NavigationIcon
++import com.hippo.ehviewer.ui.screen.kindLabel
++import com.ramcosta.composedestinations.annotation.Destination
++import com.ramcosta.composedestinations.annotation.RootGraph
++import com.ramcosta.composedestinations.navigation.DestinationsNavigator
++import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.launch
++
++private val KINDS = listOf("artist" to "艺术家", "circle" to "社团", "tag" to "标签", "title" to "标题", "group" to "其他")
++
++/**
++ * 关注列表管理：按类型分组、单个/批量开关、删除、新增。
++ */
++@Destination<RootGraph>
++@Composable
++fun AnimatedVisibilityScope.WatchListScreen(navigator: DestinationsNavigator) = Screen(navigator) {
++    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
++    val scope = rememberCoroutineScope()
++    val items = remember { mutableStateListOf<WatchItem>() }
++    var kindFilter by remember { mutableStateOf<String?>(null) }
++    var showAdd by remember { mutableStateOf(false) }
++
++    suspend fun reload() {
++        items.clear()
++        items.addAll(EhDB.watchItemDao().listFlow().first())
++    }
++
++    LaunchedEffect(Unit) { reload() }
++
++    Scaffold(
++        topBar = {
++            TopAppBar(
++                title = { Text("关注列表") },
++                navigationIcon = { NavigationIcon() },
++                actions = {
++                    TextButton(onClick = {
++                        scope.launch {
++                            EhDB.watchItemDao().setAllEnabled(true)
++                            reload()
++                        }
++                    }) { Text("全开") }
++                    TextButton(onClick = {
++                        scope.launch {
++                            EhDB.watchItemDao().setAllEnabled(false)
++                            reload()
++                        }
++                    }) { Text("全关") }
++                    IconButton(onClick = { navigator.navigate(WatchFeedScreenDestination()) }) {
++                        Icon(Icons.Default.Add, contentDescription = "打开关注页")
++                    }
++                },
++                scrollBehavior = scrollBehavior,
++            )
++        },
++        floatingActionButton = {
++            androidx.compose.material3.ExtendedFloatingActionButton(
++                onClick = { showAdd = true },
++                icon = { Icon(Icons.Default.Add, contentDescription = null) },
++                text = { Text("新增关注") },
++            )
++        },
++    ) { padding ->
++        LazyColumn(
++            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
++            contentPadding = padding,
++        ) {
++            item(key = "chips") {
++                Row(
++                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
++                    horizontalArrangement = Arrangement.spacedBy(8.dp),
++                ) {
++                    FilterChip(selected = kindFilter == null, onClick = { kindFilter = null }, label = { Text("全部") })
++                    KINDS.forEach { (k, label) ->
++                        FilterChip(
++                            selected = kindFilter == k,
++                            onClick = { kindFilter = if (kindFilter == k) null else k },
++                            label = { Text(label) },
++                        )
++                    }
++                }
++            }
++            val shown = items.filter { kindFilter == null || it.kind == kindFilter }
++            items(shown, key = { it.id }) { w ->
++                Row(
++                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
++                    verticalAlignment = Alignment.CenterVertically,
++                    horizontalArrangement = Arrangement.spacedBy(8.dp),
++                ) {
++                    Column(modifier = Modifier.weight(1f)) {
++                        Text(text = w.content, maxLines = 1, overflow = TextOverflow.Ellipsis)
++                        Text(
++                            text = kindLabel(w.kind) + (w.category?.let { " · $it" } ?: ""),
++                            style = MaterialTheme.typography.bodySmall,
++                            maxLines = 1,
++                        )
++                    }
++                    Switch(
++                        checked = w.enabled,
++                        onCheckedChange = { on ->
++                            scope.launch {
++                                EhDB.watchItemDao().setEnabled(w.id, on)
++                                reload()
++                            }
++                        },
++                    )
++                    IconButton(onClick = {
++                        scope.launch {
++                            EhDB.watchItemDao().deleteById(w.id)
++                            reload()
++                        }
++                    }) {
++                        Icon(Icons.Default.Delete, contentDescription = "删除")
++                    }
++                }
++                HorizontalDivider()
++            }
++            if (shown.isEmpty()) {
++                item { Text("没有关注项", modifier = Modifier.padding(24.dp)) }
++            }
++        }
++    }
++
++    if (showAdd) {
++        val text = rememberTextFieldState()
++        var kind by remember { mutableStateOf("artist") }
++        AlertDialog(
++            onDismissRequest = { showAdd = false },
++            title = { Text("新增关注") },
++            text = {
++                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
++                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
++                        KINDS.forEach { (k, label) ->
++                            AssistChip(
++                                onClick = { kind = k },
++                                label = { Text(if (kind == k) "✓$label" else label) },
++                            )
++                        }
++                    }
++                    OutlinedTextField(
++                        state = text,
++                        label = { Text(if (kind == "title") "标题关键词" else "名称（如 shouji ayumu）") },
++                        lineLimits = TextFieldLineLimits.SingleLine,
++                    )
++                }
++            },
++            confirmButton = {
++                TextButton(onClick = {
++                    val v = text.text.toString().trim()
++                    if (v.isNotEmpty()) {
++                        scope.launch {
++                            EhDB.watchItemDao().insert(
++                                WatchItem(kind = kind, content = v, createdAt = System.currentTimeMillis()),
++                            )
++                            reload()
++                            showAdd = false
++                        }
++                    }
++                }) { Text("添加") }
++            },
++            dismissButton = { TextButton(onClick = { showAdd = false }) { Text("取消") } },
++        )
++    }
++}
++
