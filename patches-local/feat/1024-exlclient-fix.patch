@@ -1,0 +1,19 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/ExlClient.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/ExlClient.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/client/ExlClient.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/ExlClient.kt
+@@ -51,12 +51,12 @@ object ExlClient {
+             payload.forEach { (k, v) -> put(k, v) }
+         }
+-        val resp: String = runCatching {
++        val resp: String = runCatching<String> {
+             EhApplication.ktorClient.post(url) {
+                 val token = Settings.apiToken.value
+                 if (!token.isNullOrBlank()) header("Authorization", "Bearer $token")
+                 setBody(TextContent(body.toString(), ContentType.Application.Json))
+-            }.body()
++            }.body<String>()
+         }.getOrNull() ?: return null
+-        return runCatching { json.parseToJsonElement(resp).jsonObject }.getOrNull()
++        return runCatching<JsonObject> { json.parseToJsonElement(resp).jsonObject }.getOrNull()
+     }
+ 
