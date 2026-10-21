@@ -1,0 +1,16 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/TasksScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/TasksScreen.kt
+index f9aca48ef..12a096dc4 100644
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/TasksScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/TasksScreen.kt
+@@ -22,2 +22,3 @@ import androidx.compose.material3.TopAppBarDefaults
+ import androidx.compose.runtime.Composable
++import androidx.compose.runtime.produceState
+ import androidx.compose.runtime.getValue
+@@ -56,3 +57,6 @@ fun AnimatedVisibilityScope.TasksScreen(navigator: DestinationsNavigator) = Scre
+     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+-    val tasks by EhDB.batchFavTaskDao().listFlow().collectAsState(emptyList())
++    // 用 produceState 而不是 collectAsState：后者与本项目 PrefDelegate.collectAsState 重载冲突
++    val tasks by produceState(emptyList<BatchFavTask>()) {
++        EhDB.batchFavTaskDao().listFlow().collect { value = it }
++    }
+     val timeFormat = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
