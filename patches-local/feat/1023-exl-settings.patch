@@ -237,7 +237,7 @@ new file mode 100644
 + * - 列表显示矩阵：来源（下载优先 / 优先订阅 / 关注）× 列表（普通列表 / 历史）
 + * - 版本与订阅行为
 + */
-+object ExlPrefs : DataStorePreferences(null) {
++object ExlPrefs : DataStorePreferences("exl_prefs") {
 +    // ===== 列表显示矩阵 =====
 +    val hidePqInList = boolPref("hide_pq_in_list", true)
 +    val hideFeedInList = boolPref("hide_feed_in_list", true)
