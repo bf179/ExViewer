@@ -2,14 +2,11 @@ name: Build (legacy pkg)
 
 # 旧包名轨：applicationId = moe.tarsin.ehviefav，versionCode 180062 / versionName 1.13.1-sf
 # 用途：覆盖安装旧版 → 直接读旧数据 / 导出旧库；与旧包同版本号，随时可装回旧包。
-# 只在补丁/脚本变化或手动触发时构建，且只出 arm64-v8a。
+# 只在打 tag（v*）或手动触发时构建，且只出 arm64-v8a。
+# 不在每次 push 时构建：这条轨一年用不了几次，随提交跑纯属浪费算力。
 on:
   push:
-    branches: [v2/ujui-direct, v2/cai-proxy]
-    paths:
-      - 'patches-local/**'
-      - 'scripts/**'
-      - '.github/workflows/build-legacy.yml'
+    tags: ['v*']
   workflow_dispatch:
 
 jobs:

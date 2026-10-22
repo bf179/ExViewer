@@ -1,0 +1,41 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/ExlClient.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/ExlClient.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/client/ExlClient.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/ExlClient.kt
+@@ -82,5 +82,5 @@ object ExlClient {
+         @SerialName("display_gid") val displayGid: Long = 0,
+         @SerialName("display_token") val displayToken: String = "",
+-        val replaced: Boolean = false,
++        val replaced: Int = 0,
+         @SerialName("downloaded_latest") val downloadedLatest: Int = 0,
+         val isfin: Int = 0,
+@@ -132,5 +132,5 @@ object ExlClient {
+         @SerialName("display_gid") val displayGid: Long = 0,
+         @SerialName("display_token") val displayToken: String = "",
+-        val replaced: Boolean = false,
++        val replaced: Int = 0,
+     )
+ 
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
+@@ -176,5 +176,5 @@ fun AnimatedVisibilityScope.DownloadPriorityScreen(navigator: DestinationsNaviga
+                     }
+                     val badges = buildList {
+-                        if (item.replaced) add("↻ 新版")
++                        if (item.replaced == 1) add("↻ 新版")
+                         if (item.expunged == 1) add("已下架")
+                         if (item.downloadedLatest > 0) add("已下载") else if (item.isfin == 1) add("已下 · 旧版")
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/FeedSubScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/FeedSubScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/FeedSubScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/FeedSubScreen.kt
+@@ -211,8 +211,8 @@ fun AnimatedVisibilityScope.FeedSubScreen(navigator: DestinationsNavigator) = Sc
+                         overflow = TextOverflow.Ellipsis,
+                     )
+-                    if (item.replaced || item.expunged == 1) {
++                    if (item.replaced == 1 || item.expunged == 1) {
+                         Text(
+                             text = buildList {
+-                                if (item.replaced) add("↻ 新版")
++                                if (item.replaced == 1) add("↻ 新版")
+                                 if (item.expunged == 1) add("已下架")
+                             }.joinToString("  "),
