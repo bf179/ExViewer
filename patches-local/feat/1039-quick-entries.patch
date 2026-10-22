@@ -1,0 +1,172 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
+@@ -28,4 +28,5 @@ import androidx.compose.foundation.text.input.rememberTextFieldState
+ import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+ import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.filled.Block
+ import androidx.compose.material.icons.filled.FilterAlt
+ import androidx.compose.material.icons.filled.Flight
+@@ -41,4 +42,5 @@ import androidx.compose.material.icons.filled.PlaylistAdd
+ import androidx.compose.material.icons.filled.Reorder
+ import androidx.compose.material.icons.filled.Shuffle
++import androidx.compose.material.icons.filled.Star
+ import androidx.compose.material.icons.outlined.Bookmarks
+ import androidx.compose.material3.CardDefaults
+@@ -109,4 +111,10 @@ import com.hippo.ehviewer.Settings
+ import com.hippo.ehviewer.asMutableState
+ import com.hippo.ehviewer.client.EhTagDatabase
++import com.hippo.ehviewer.client.watchKindOf
++import com.hippo.ehviewer.client.watchKindLabel
++import com.hippo.ehviewer.client.watchContentOf
++import com.hippo.ehviewer.client.filterModeLabel
++import com.ehviewer.core.database.model.Filter
++import com.ehviewer.core.database.model.WatchItem
+ import com.hippo.ehviewer.client.EhUtils
+ import com.hippo.ehviewer.client.data.ListUrlBuilder
+@@ -141,4 +149,5 @@ import com.hippo.ehviewer.ui.main.GalleryList
+ import com.hippo.ehviewer.ui.main.SearchFilter
+ import com.hippo.ehviewer.ui.tools.DialogState
++import com.hippo.ehviewer.ui.settings.detectFilterMode
+ import com.hippo.ehviewer.ui.tools.awaitConfirmationOrCancel
+ import com.hippo.ehviewer.ui.tools.awaitInputText
+@@ -696,4 +705,41 @@ fun AnimatedVisibilityScope.GalleryListScreen(
+             }
+         }
++        // 关注当前搜索词（类型自动识别，可确认）
++        onClick(Icons.Default.Star) {
++            launch {
++                val raw = urlBuilder.keyword.orEmpty().trim()
++                if (raw.isBlank()) {
++                    snackbar("当前没有搜索词")
++                } else {
++                    val input = awaitInputText(initial = raw, title = "关注此项", hint = "标签 / uploader:xxx / 标题")
++                    if (input != null && input.trim().isNotEmpty()) {
++                        val kind = watchKindOf(input)
++                        val content = watchContentOf(input)
++                        awaitConfirmationOrCancel {
++                            Text("关注「$content」作为${watchKindLabel(kind)}?")
++                        }
++                        EhDB.watchItemDao().insert(
++                            WatchItem(kind = kind, content = content, createdAt = System.currentTimeMillis()),
++                        )
++                        snackbar("已加入关注")
++                    }
++                }
++            }
++        }
++        // 屏蔽当前搜索词（类型自动识别，写入过滤列表）
++        onClick(Icons.Default.Block) {
++            launch {
++                val raw = urlBuilder.keyword.orEmpty().trim()
++                val input = awaitInputText(initial = raw, title = "添加过滤器", hint = "把搜索框内容加入屏蔽列表")
++                if (input != null && input.trim().isNotEmpty()) {
++                    val mode = detectFilterMode(input)
++                    awaitConfirmationOrCancel {
++                        Text("屏蔽 \"${input.trim()}\"（${filterModeLabel(mode)}）?")
++                    }
++                    EhDB.addFilter(Filter(mode = mode, text = input.trim()))
++                    snackbar("过滤项已添加")
++                }
++            }
++        }
+         onClick(Icons.Default.Refresh) {
+             urlBuilder.setRange(0)
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt
+@@ -636,4 +636,21 @@ fun BelowHeader(galleryDetail: GalleryDetail, voteTag: VoteTag) {
+             }
+         }
++        EhIconButton(
++            icon = Icons.Default.Search,
++            text = "提取作者",
++            onClick = {
++                val raw = if (!galleryDetail.titleJpn.isNullOrBlank()) galleryDetail.titleJpn else galleryDetail.title
++                val m = Regex("\\[.*?\\]").find(raw.orEmpty())
++                val kw = m?.value ?: raw
++                if (!kw.isNullOrBlank()) {
++                    navigate(
++                        ListUrlBuilder(
++                            mode = ListUrlBuilder.MODE_NORMAL,
++                            keyword = "\"" + kw + "\"",
++                        ).asDst(),
++                    )
++                }
++            },
++        )
+         EhIconButton(
+             icon = EhIcons.Default.Magnet,
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/WatchListScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/WatchListScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/WatchListScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/WatchListScreen.kt
+@@ -53,5 +53,5 @@ import kotlinx.coroutines.flow.first
+ import kotlinx.coroutines.launch
+ 
+-private val KINDS = listOf("artist" to "艺术家", "circle" to "社团", "tag" to "标签", "title" to "标题", "group" to "其他")
++private val KINDS = listOf("artist" to "艺术家", "circle" to "社团", "tag" to "标签", "title" to "标题", "group" to "标签组")
+ 
+ /**
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
+@@ -111,7 +111,4 @@ fun AnimatedVisibilityScope.ExlSettingsScreen(navigator: DestinationsNavigator)
+                 navigator.navigate(FilterScreenDestination())
+             }
+-            Preference(title = "快捷添加屏蔽项", summary = "输入即自动识别：标签 / 上传者 / 标签组 / 标题") {
+-                navigator.navigate(QuickBlockScreenDestination())
+-            }
+             Preference(title = "隐藏规则", summary = "跨端同步的隐藏列表") {
+                 navigator.navigate(HideListScreenDestination())
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/WatchClassify.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/WatchClassify.kt
+new file mode 100644
+--- /dev/null
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/WatchClassify.kt
+@@ -0,0 +1,47 @@
++package com.hippo.ehviewer.client
++
++import com.ehviewer.core.database.model.FilterMode
++
++/**
++ * 关注项 / 屏蔽项的「智能识别」判定——与旧版 addKeyword、FilterAlt 的判定保持一致的语义，
++ * 入口在页面里（搜索结果页动作栏 / 详情页），不在设置页。
++ */
++
++/** uploader:xxx / artist:xxx / group:xxx / tag:xxx → 对应 kind；其余（含空格多词）视为标题 */
++fun watchKindOf(raw: String): String {
++    val t = raw.trim()
++    return when {
++        t.startsWith("uploader:", true) -> "uploader"
++        t.startsWith("artist:", true) -> "artist"
++        t.startsWith("group:", true) -> "circle"
++        t.startsWith("tag:", true) -> "tag"
++        else -> "title"
++    }
++}
++
++/** 去掉 namespace 前缀；多标签用空格分隔时视为「标签组」（或逻辑，用 | 连接） */
++fun watchContentOf(raw: String): String {
++    val t = raw.trim()
++    val body = if (t.contains(":")) t.substringAfter(':').trim() else t
++    val tokens = body.split(" ", "\n").map { it.trim() }.filter { it.isNotEmpty() }
++    return if (tokens.size > 1) tokens.joinToString(" | ") else body
++}
++
++fun watchKindLabel(kind: String): String = when (kind) {
++    "artist" -> "艺术家"
++    "circle" -> "社团"
++    "tag" -> "标签"
++    "uploader" -> "上传者"
++    "group" -> "标签组"
++    else -> "标题"
++}
++
++fun filterModeLabel(mode: FilterMode): String = when (mode) {
++    FilterMode.TITLE -> "标题"
++    FilterMode.UPLOADER -> "上传者"
++    FilterMode.TAG -> "标签"
++    FilterMode.TAG_GROUP -> "标签组"
++    FilterMode.TAG_NAMESPACE -> "命名空间"
++    FilterMode.COMMENT -> "评论"
++    FilterMode.COMMENTER -> "评论者"
++}
