@@ -1,0 +1,31 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/WatchClassify.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/WatchClassify.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/client/WatchClassify.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/WatchClassify.kt
+@@ -20,9 +20,14 @@ fun watchKindOf(raw: String): String {
+ }
+ 
+-/** 去掉 namespace 前缀；多标签用空格分隔时视为「标签组」（或逻辑，用 | 连接） */
+-fun watchContentOf(raw: String): String {
++/**
++ * 规范化关注内容：
++ * - 标签类（tag/artist/circle/uploader/group）：去掉 namespace 前缀；空格分隔的多个标签用 " | " 连成或关系
++ * - 标题类：原样保留（标题里的空格是普通词，不能拆成或）
++ */
++fun watchContentOf(raw: String, kind: String = watchKindOf(raw)): String {
+     val t = raw.trim()
++    if (kind == "title") return t
+     val body = if (t.contains(":")) t.substringAfter(':').trim() else t
+-    val tokens = body.split(" ", "\n").map { it.trim() }.filter { it.isNotEmpty() }
++    val tokens = body.split(" ", "\n", "\u3000").map { it.trim() }.filter { it.isNotEmpty() }
+     return if (tokens.size > 1) tokens.joinToString(" | ") else body
+ }
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
+@@ -715,5 +715,5 @@ fun AnimatedVisibilityScope.GalleryListScreen(
+                     if (input != null && input.trim().isNotEmpty()) {
+                         val kind = watchKindOf(input)
+-                        val content = watchContentOf(input)
++                        val content = watchContentOf(input, kind)
+                         awaitConfirmationOrCancel {
+                             Text("关注「$content」作为${watchKindLabel(kind)}?")
