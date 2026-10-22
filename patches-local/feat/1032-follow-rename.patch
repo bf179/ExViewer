@@ -6,7 +6,7 @@ diff --git a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/dao/Loca
  interface LocalFavoritesDao {
 +    // 版本跟随：把旧 gid 的本地收藏复制到新 gid（幂等）
 +    @Query("INSERT OR IGNORE INTO LOCAL_FAVORITES (GID, TIME) SELECT :newGid, TIME FROM LOCAL_FAVORITES WHERE GID = :oldGid")
-+    suspend fun copyTo(oldGid: Long, newGid: Long): Int
++    suspend fun copyTo(oldGid: Long, newGid: Long): Long
 +
      @Query("SELECT COUNT(*) FROM LOCAL_FAVORITES")
      fun count(): Flow<Int>
@@ -18,7 +18,7 @@ diff --git a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/dao/Prog
  interface ProgressDao {
 +    // 版本跟随：把旧 gid 的阅读进度复制到新 gid（幂等）
 +    @Query("INSERT OR IGNORE INTO PROGRESS (GID, PAGE) SELECT :newGid, PAGE FROM PROGRESS WHERE GID = :oldGid")
-+    suspend fun copyTo(oldGid: Long, newGid: Long): Int
++    suspend fun copyTo(oldGid: Long, newGid: Long): Long
 +
      @Query("SELECT IFNULL(PAGE, 0) FROM PROGRESS WHERE GID = :gid")
      suspend fun getPage(gid: Long): Int
