@@ -37,10 +37,10 @@ diff --git a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/Database
 diff --git a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/DatabaseMigrations.kt b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/DatabaseMigrations.kt
 --- a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/DatabaseMigrations.kt
 +++ b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/DatabaseMigrations.kt
-@@ -158,4 +158,36 @@ class Schema24to25 : Migration(24, 25) {
+@@ -158,4 +158,30 @@ class Schema24to25 : Migration(24, 25) {
  }
  
-+/** v28：版本链 / 来源索引 / 关注列表（三张新表，不动旧表） */
++/** v28：版本链 / 来源索引 / 关注列表（三张新表，不动旧表；不建索引以与实体声明一致） */
 +class Schema27to28 : Migration(27, 28) {
 +    override fun migrate(connection: SQLiteConnection) {
 +        connection.execSQL(
@@ -48,12 +48,6 @@ diff --git a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/Database
 +                "`gid` INTEGER NOT NULL, `root_gid` INTEGER NOT NULL, `prev_gid` INTEGER, " +
 +                "`level` TEXT NOT NULL, `fingerprint` TEXT, `detected_at` INTEGER NOT NULL, " +
 +                "PRIMARY KEY(`gid`))"
-+        )
-+        connection.execSQL(
-+            "CREATE INDEX IF NOT EXISTS `index_gallery_version_root_gid` ON `gallery_version` (`root_gid`)"
-+        )
-+        connection.execSQL(
-+            "CREATE INDEX IF NOT EXISTS `index_gallery_version_prev_gid` ON `gallery_version` (`prev_gid`)"
 +        )
 +        connection.execSQL(
 +            "CREATE TABLE IF NOT EXISTS `gallery_origin` (" +
@@ -90,7 +84,7 @@ diff --git a/app/src/main/kotlin/com/hippo/ehviewer/EhDB.kt b/app/src/main/kotli
 +        addMigrations(Schema17to18(), Schema23to24(), Schema24to25(), Schema25to26(), Schema26to27(), Schema27to28())
      }
  
-@@ -306,5 +307,5 @@ object EhDB {
+@@ -311,5 +312,5 @@ object EhDB {
          val oldDB = resource {
              roomDb<EhDatabase>(tempDBName) {
 -                addMigrations(Schema17to18(), Schema23to24(), Schema24to25(), Schema25to26(), Schema26to27())
@@ -101,12 +95,11 @@ diff --git a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/model/Ga
 new file mode 100644
 --- /dev/null
 +++ b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/model/GalleryVersion.kt
-@@ -0,0 +1,34 @@
+@@ -0,0 +1,33 @@
 +package com.ehviewer.core.database.model
 +
 +import androidx.room.ColumnInfo
 +import androidx.room.Entity
-+import androidx.room.Index
 +import androidx.room.PrimaryKey
 +
 +/**
@@ -115,10 +108,7 @@ new file mode 100644
 + *
 + * level: origin | l2_renamed | l3_expunged
 + */
-+@Entity(
-+    tableName = "gallery_version",
-+    indices = [Index("root_gid"), Index("prev_gid")],
-+)
++@Entity(tableName = "gallery_version")
 +data class GalleryVersion(
 +    @PrimaryKey
 +    @ColumnInfo(name = "gid")
@@ -139,7 +129,6 @@ new file mode 100644
 +    @ColumnInfo(name = "detected_at")
 +    val detectedAt: Long = 0L,
 +)
-+
 diff --git a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/model/GalleryOrigin.kt b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/model/GalleryOrigin.kt
 new file mode 100644
 --- /dev/null
@@ -165,7 +154,6 @@ new file mode 100644
 +    @ColumnInfo(name = "kinds")
 +    val kinds: String,
 +)
-+
 diff --git a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/model/WatchItem.kt b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/model/WatchItem.kt
 new file mode 100644
 --- /dev/null
@@ -213,12 +201,11 @@ new file mode 100644
 +    @ColumnInfo(name = "created_at")
 +    val createdAt: Long = 0L,
 +)
-+
 diff --git a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/dao/GalleryVersionDao.kt b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/dao/GalleryVersionDao.kt
 new file mode 100644
 --- /dev/null
 +++ b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/dao/GalleryVersionDao.kt
-@@ -0,0 +1,36 @@
+@@ -0,0 +1,35 @@
 +package com.ehviewer.core.database.dao
 +
 +import androidx.room.Dao
@@ -254,12 +241,11 @@ new file mode 100644
 +    @Query("SELECT COUNT(*) FROM gallery_version")
 +    suspend fun count(): Int
 +}
-+
 diff --git a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/dao/GalleryOriginDao.kt b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/dao/GalleryOriginDao.kt
 new file mode 100644
 --- /dev/null
 +++ b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/dao/GalleryOriginDao.kt
-@@ -0,0 +1,29 @@
+@@ -0,0 +1,28 @@
 +package com.ehviewer.core.database.dao
 +
 +import androidx.room.Dao
@@ -288,12 +274,11 @@ new file mode 100644
 +    @Query("SELECT COUNT(*) FROM gallery_origin")
 +    suspend fun count(): Int
 +}
-+
 diff --git a/core/data/src/commonMain/kotlin/com/ehviewer/core/database/dao/WatchItemDao.kt b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/dao/WatchItemDao.kt
 new file mode 100644
 --- /dev/null
 +++ b/core/data/src/commonMain/kotlin/com/ehviewer/core/database/dao/WatchItemDao.kt
-@@ -0,0 +1,46 @@
+@@ -0,0 +1,45 @@
 +package com.ehviewer.core.database.dao
 +
 +import androidx.room.Dao
@@ -339,4 +324,3 @@ new file mode 100644
 +    @Query("SELECT COUNT(*) FROM watch_item")
 +    suspend fun count(): Int
 +}
-+
