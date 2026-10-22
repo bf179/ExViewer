@@ -1,0 +1,31 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt
+@@ -31,4 +31,5 @@ import androidx.compose.material.icons.filled.Favorite
+ import androidx.compose.material.icons.filled.FavoriteBorder
+ import androidx.compose.material.icons.filled.HeartBroken
++import androidx.compose.material.icons.filled.QueueMusic
+ import androidx.compose.material3.MaterialTheme
+ import androidx.compose.material3.SelectableDates
+@@ -309,5 +310,7 @@ suspend fun doGalleryInfoAction(info: BaseGalleryInfo) {
+             add(Icons.AutoMirrored.Default.DriveFileMove to R.string.download_move_dialog_title)
+         }
++        add(Icons.Default.QueueMusic to R.string.add_to_pq)
+     }
++    val pqIndex = items.size - 1
+     val selected = awaitSelectItemWithIcon(items, EhUtils.getSuitableTitle(info))
+     when (selected) {
+@@ -337,4 +340,13 @@ suspend fun doGalleryInfoAction(info: BaseGalleryInfo) {
+         }
+         3 -> showMoveDownloadLabel(info)
++        pqIndex -> {
++            runSuspendCatching {
++                com.hippo.ehviewer.client.ExlClient.pqAdd("${info.gid}_${info.token}")
++            }.onSuccess {
++                tip(R.string.add_to_pq_success)
++            }.onFailure {
++                tip(R.string.add_to_pq_failure)
++            }
++        }
+     }
+ }
