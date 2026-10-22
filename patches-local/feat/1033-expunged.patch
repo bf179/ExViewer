@@ -1,0 +1,91 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
+@@ -30,4 +30,5 @@ import com.hippo.ehviewer.asMutableState
+ import com.hippo.ehviewer.collectAsState
+ import com.hippo.ehviewer.ui.Screen
++import com.hippo.ehviewer.ui.destinations.ExpungedScreenDestination
+ import com.hippo.ehviewer.ui.destinations.FeedSubScreenDestination
+ import com.hippo.ehviewer.ui.destinations.FilterScreenDestination
+@@ -133,4 +134,7 @@ fun AnimatedVisibilityScope.ExlSettingsScreen(navigator: DestinationsNavigator)
+                 navigator.navigate(HideListScreenDestination())
+             }
++            Preference(title = "已下架汇总", summary = "expunged 的画廊单独列出（不删不隐藏）") {
++                navigator.navigate(ExpungedScreenDestination())
++            }
+             Preference(title = "关注列表", summary = "被关注的作者 / 社团 / 标签 / 标题") {
+                 navigator.navigate(WatchListScreenDestination())
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/ExpungedScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/ExpungedScreen.kt
+new file mode 100644
+--- /dev/null
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/ExpungedScreen.kt
+@@ -0,0 +1,69 @@
++package com.hippo.ehviewer.ui.screen
++
++import androidx.compose.animation.AnimatedVisibilityScope
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.lazy.LazyColumn
++import androidx.compose.foundation.lazy.items
++import androidx.compose.material3.HorizontalDivider
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Scaffold
++import androidx.compose.material3.Text
++import androidx.compose.material3.TopAppBar
++import androidx.compose.material3.TopAppBarDefaults
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.mutableStateListOf
++import androidx.compose.runtime.remember
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.input.nestedscroll.nestedScroll
++import androidx.compose.ui.unit.dp
++import com.hippo.ehviewer.EhDB
++import com.hippo.ehviewer.ui.Screen
++import com.hippo.ehviewer.ui.main.NavigationIcon
++import com.ramcosta.composedestinations.annotation.Destination
++import com.ramcosta.composedestinations.annotation.RootGraph
++import com.ramcosta.composedestinations.navigation.DestinationsNavigator
++
++/** 已下架汇总：单独列出 expunged 的 gid（不删、不隐藏，只汇集查看）。 */
++@Destination<RootGraph>
++@Composable
++fun AnimatedVisibilityScope.ExpungedScreen(navigator: DestinationsNavigator) = Screen(navigator) {
++    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
++    val gids = remember { mutableStateListOf<Int>() }
++
++    LaunchedEffect(Unit) {
++        gids.clear()
++        gids.addAll(EhDB.galleryOriginDao().gidsOf("expunged").sorted())
++    }
++
++    Scaffold(
++        topBar = {
++            TopAppBar(
++                title = { Text("已下架 · ${gids.size}") },
++                navigationIcon = { NavigationIcon() },
++                scrollBehavior = scrollBehavior,
++            )
++        },
++    ) { padding ->
++        LazyColumn(
++            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
++            contentPadding = padding,
++        ) {
++            item(key = "tip") {
++                Text(
++                    text = "这些画廊在站点已被删除且没有新版。数据不删、不隐藏，只是单独汇总。",
++                    modifier = Modifier.padding(16.dp),
++                    style = MaterialTheme.typography.bodySmall,
++                )
++            }
++            items(gids, key = { "e_$it" }) { gid ->
++                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
++                    Text("gid $gid", style = MaterialTheme.typography.bodyMedium)
++                }
++                HorizontalDivider()
++            }
++        }
++    }
++}
