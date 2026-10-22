@@ -1,0 +1,220 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ExlPrefs.kt b/app/src/main/kotlin/com/hippo/ehviewer/ExlPrefs.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ExlPrefs.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ExlPrefs.kt
+@@ -11,4 +11,8 @@ import com.ehviewer.core.preferences.DataStorePreferences
+  */
+ object ExlPrefs : DataStorePreferences("exl_prefs") {
++    // ===== 服务端（唯一地址，其余地址都从它推导）=====
++    // 留空表示未配置；仓库是公开的，默认值里绝不能写死任何私人域名
++    val exlUrl = stringPref("exl_url", "")
++
+     // ===== 列表显示矩阵 =====
+     val hidePqInList = boolPref("hide_pq_in_list", true)
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/ExlClient.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/ExlClient.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/client/ExlClient.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/ExlClient.kt
+@@ -2,4 +2,5 @@ package com.hippo.ehviewer.client
+ 
+ import com.hippo.ehviewer.EhApplication
++import com.hippo.ehviewer.ExlPrefs
+ import com.hippo.ehviewer.Settings
+ import io.ktor.client.call.body
+@@ -35,11 +36,19 @@ object ExlClient {
+     }
+ 
+-    /** 从 pq_url（历史配置是 .../pq_galleries）推导出 /api 地址 */
++    /**
++     * 服务端地址只认 ExlPrefs.exlUrl 一个来源。
++     * 兼容老配置：未设置时回退到旧 pq_url（去掉 /pq_galleries 尾巴）推导，仅作迁移用。
++     */
++    fun rootUrl(): String {
++        val raw = ExlPrefs.exlUrl.value.trim()
++        val base = if (raw.isNotEmpty()) raw else Settings.pqUrl.value?.trim().orEmpty()
++        if (base.isEmpty()) return ""
++        val cut = base.indexOf("/pq_galleries")
++        return (if (cut > 0) base.substring(0, cut) else base).trimEnd('/')
++    }
++
+     fun apiUrl(): String {
+-        val raw = Settings.pqUrl.value?.trim().orEmpty()
+-        if (raw.isEmpty()) return ""
+-        val cut = raw.indexOf("/pq_galleries")
+-        val root = if (cut > 0) raw.substring(0, cut) else raw.trimEnd('/')
+-        return root.trimEnd('/') + "/api"
++        val root = rootUrl()
++        return if (root.isEmpty()) "" else root + "/api"
+     }
+ 
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/ExlApi.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/ExlApi.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/client/ExlApi.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/ExlApi.kt
+@@ -20,7 +20,7 @@ import splitties.init.appCtx
+  * 自有服务端联动（旧版 8f750fe 的 SAPI / PAPI 特性移植）。
+  *
+- * - SAPI（`sapi_url`，如 `https://exl.loliwant.cc`）：收藏 / 取消收藏后同步收藏状态
++ * - SAPI（`sapi_url`，形如 `https://your-server.example.com`）：收藏 / 取消收藏后同步收藏状态
+  *   `POST /exl`，body `{user,gid,token,favoriteslot,op}`；`/uc` 上传 cookie 身份。
+- * - PAPI（`papi_url`，如 `https://exl.loliwant.cc/add_item`）：把标签加入优先队列。
++ * - PAPI（`papi_url`，形如 `https://your-server.example.com/add_item`）：把标签加入优先队列。
+  */
+ @Serializable
+@@ -47,5 +47,5 @@ data class UcApiRequest(
+ )
+ 
+-private const val DEFAULT_USER = "loliwant"
++const val DEFAULT_USER = ""
+ private var currentToast: Toast? = null
+ 
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
+@@ -88,8 +88,9 @@ fun AnimatedVisibilityScope.ExlSettingsScreen(navigator: DestinationsNavigator)
+         ) {
+             SectionTitle("服务端")
+-            Preference(title = "服务端地址", summary = pqUrl ?: "未设置") {
++            val exlUrl = ExlPrefs.exlUrl.value
++            Preference(title = "服务端地址", summary = exlUrl.ifBlank { "未设置" }) {
+                 scope.launch {
+-                    val input = awaitInputText(initial = pqUrl.orEmpty(), title = "服务端地址", hint = "https://exl.loliwant.cc")
+-                    Settings.pqUrl.value = input.trim().ifBlank { null }
++                    val input = awaitInputText(initial = exlUrl, title = "服务端地址", hint = "https://your-server.example.com")
++                    ExlPrefs.exlUrl.value = input.trim()
+                 }
+             }
+@@ -105,22 +106,4 @@ fun AnimatedVisibilityScope.ExlSettingsScreen(navigator: DestinationsNavigator)
+                 state = Settings.syncFav.asMutableState(),
+             )
+-            Preference(title = "SAPI 地址", summary = sapiUrl ?: "未设置") {
+-                scope.launch {
+-                    val input = awaitInputText(initial = sapiUrl.orEmpty(), title = "SAPI 地址")
+-                    Settings.sapiUrl.value = input.trim().ifBlank { null }
+-                }
+-            }
+-            Preference(title = "PAPI 地址", summary = papiUrl ?: "未设置") {
+-                scope.launch {
+-                    val input = awaitInputText(initial = papiUrl.orEmpty(), title = "PAPI 地址")
+-                    Settings.papiUrl.value = input.trim().ifBlank { null }
+-                }
+-            }
+-            Preference(title = "快捷附加关键词", summary = addKeyword ?: "未设置") {
+-                scope.launch {
+-                    val input = awaitInputText(initial = addKeyword.orEmpty(), title = "快捷附加关键词")
+-                    Settings.addKeyword.value = input.trim().ifBlank { null }
+-                }
+-            }
+ 
+             SectionTitle("屏蔽与过滤")
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/SyncHideScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/SyncHideScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/SyncHideScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/SyncHideScreen.kt
+@@ -64,94 +64,4 @@ fun AnimatedVisibilityScope.SyncHideScreen(navigator: DestinationsNavigator) = S
+                 .padding(paddingValues),
+         ) {
+-            Preference(
+-                title = pqTitle,
+-                summary = pqUrl ?: "未设置",
+-            ) {
+-                coroutineScope.launch {
+-                    val input = awaitInputText(initial = pqUrl.orEmpty(), title = pqTitle, hint = pqHint)
+-                    Settings.pqUrl.value = input.trim().ifBlank { null }
+-                }
+-            }
+-            Preference(
+-                title = tokenTitle,
+-                summary = apiToken?.let { "已配置 (${it.take(4)}…)" } ?: "未设置",
+-            ) {
+-                coroutineScope.launch {
+-                    val input = awaitInputText(initial = apiToken.orEmpty(), title = tokenTitle, hint = tokenHint)
+-                    Settings.apiToken.value = input.trim().ifBlank { null }
+-                }
+-            }
+-            SwitchPreference(
+-                title = "隐藏已收藏画廊",
+-                summary = "优先队列 / 列表中不显示已收藏项（本地库双查）",
+-                state = Settings.hideFav.asMutableState(),
+-            )
+-            SwitchPreference(
+-                title = "隐藏优先队列标签画廊",
+-                summary = "搜索 / 热门 / 排行中隐藏命中优先队列标签的画廊",
+-                state = Settings.hidePqTagged.asMutableState(),
+-            )
+-            SwitchPreference(
+-                title = "历史页隐藏优先队列标签画廊",
+-                summary = "历史记录页独立控制，不随上一项",
+-                state = Settings.hidePqTaggedInHistory.asMutableState(),
+-            )
+-            SwitchPreference(
+-                title = "整理模式（页内聚类）",
+-                summary = "同一 [系列] 或同一画师的画廊在列表中相邻排列",
+-                state = Settings.organizeMode.asMutableState(),
+-            )
+-            Preference(
+-                title = "隐藏列表管理",
+-                summary = "管理标题 / 上传者 / 标签三类隐藏条目",
+-            ) { navigator.navigate(HideListScreenDestination) }
+-            SwitchPreference(
+-                title = "同步收藏到自有服务端（SAPI）",
+-                summary = "收藏 / 取消收藏后向服务端 POST /exl，并在列表工具栏提供 cookie 上传",
+-                state = Settings.syncFav.asMutableState(),
+-            )
+-            Preference(
+-                title = "SAPI 地址",
+-                summary = Settings.sapiUrl.value ?: "未设置（如 https://exl.loliwant.cc）",
+-            ) {
+-                coroutineScope.launch {
+-                    val input = awaitInputText(
+-                        initial = Settings.sapiUrl.value.orEmpty(),
+-                        title = "SAPI 地址",
+-                        hint = "https://exl.loliwant.cc",
+-                    )
+-                    Settings.sapiUrl.value = input.trim().ifBlank { null }
+-                }
+-            }
+-            Preference(
+-                title = "PAPI 地址（优先队列入队）",
+-                summary = Settings.papiUrl.value ?: "未设置（如 https://exl.loliwant.cc/add_item）",
+-            ) {
+-                coroutineScope.launch {
+-                    val input = awaitInputText(
+-                        initial = Settings.papiUrl.value.orEmpty(),
+-                        title = "PAPI 地址",
+-                        hint = "https://exl.loliwant.cc/add_item",
+-                    )
+-                    Settings.papiUrl.value = input.trim().ifBlank { null }
+-                }
+-            }
+-            Preference(
+-                title = "快捷附加关键词",
+-                summary = Settings.addKeyword.value ?: "未设置",
+-            ) {
+-                coroutineScope.launch {
+-                    val input = awaitInputText(
+-                        initial = Settings.addKeyword.value.orEmpty(),
+-                        title = "快捷附加关键词",
+-                        hint = "如 -l:chinese$",
+-                    )
+-                    Settings.addKeyword.value = input.trim().ifBlank { null }
+-                }
+-            }
+-            Preference(
+-                title = "任务中心",
+-                summary = "批量收藏等后台任务的进度 / 取消 / 删除（多任务自动排队）",
+-            ) { navigator.navigate(TasksScreenDestination) }
+         }
+     }
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt
+@@ -111,4 +111,5 @@ import com.hippo.ehviewer.client.EhUrl
+ import com.hippo.ehviewer.client.PqApiRequest
+ import com.hippo.ehviewer.client.sendPqApiRequest
++import com.hippo.ehviewer.client.DEFAULT_USER
+ import com.hippo.ehviewer.client.EhUtils
+ import com.hippo.ehviewer.client.data.ListUrlBuilder
+@@ -754,5 +755,5 @@ fun BelowHeader(galleryDetail: GalleryDetail, voteTag: VoteTag) {
+                         if (!papiUrl.isNullOrBlank()) {
+                             onSelect("添加至优先队列") {
+-                                sendPqApiRequest(PqApiRequest("loliwant", "tag", tag), papiUrl)
++                                sendPqApiRequest(PqApiRequest(DEFAULT_USER, "tag", tag), papiUrl)
+                                 snackbar("已提交到优先队列")
+                             }
