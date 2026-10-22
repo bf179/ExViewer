@@ -1,0 +1,66 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
+@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Row
+ import androidx.compose.foundation.layout.fillMaxWidth
+ import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.size
+ import androidx.compose.foundation.lazy.LazyColumn
+ import androidx.compose.foundation.lazy.items
++import androidx.compose.foundation.shape.RoundedCornerShape
+ import androidx.compose.material.icons.Icons
+ import androidx.compose.material.icons.filled.Search
+@@ -34,8 +36,11 @@ import androidx.compose.runtime.rememberCoroutineScope
+ import androidx.compose.runtime.setValue
+ import androidx.compose.ui.Alignment
++import androidx.compose.ui.draw.clip
++import androidx.compose.ui.layout.ContentScale
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.input.nestedscroll.nestedScroll
+ import androidx.compose.ui.text.style.TextOverflow
+ import androidx.compose.ui.unit.dp
++import coil3.compose.AsyncImage
+ import com.hippo.ehviewer.client.ExlClient
+ import com.hippo.ehviewer.client.LocalQuery
+@@ -140,5 +145,5 @@ fun AnimatedVisibilityScope.DownloadPriorityScreen(navigator: DestinationsNaviga
+             }
+             items(shown, key = { it.gid }) { item ->
+-                Column(
++                Row(
+                     modifier = Modifier
+                         .fillMaxWidth()
+@@ -154,9 +159,19 @@ fun AnimatedVisibilityScope.DownloadPriorityScreen(navigator: DestinationsNaviga
+                             },
+                         )
+-                        .padding(horizontal = 16.dp, vertical = 8.dp),
+-                    verticalArrangement = Arrangement.spacedBy(2.dp),
++                        .padding(horizontal = 12.dp, vertical = 6.dp),
++                    verticalAlignment = Alignment.CenterVertically,
+                 ) {
++                    AsyncImage(
++                        model = item.thumb,
++                        contentDescription = null,
++                        modifier = Modifier.size(width = 72.dp, height = 96.dp).clip(RoundedCornerShape(4.dp)),
++                        contentScale = ContentScale.Crop,
++                    )
++                    Column(
++                        modifier = Modifier.padding(start = 8.dp).weight(1f),
++                        verticalArrangement = Arrangement.spacedBy(2.dp),
++                    ) {
+                     Text(
+-                        text = item.title ?: item.title_jpn ?: "#${item.gid}",
++                        text = unescapeHtml(item.title ?: item.title_jpn ?: "#${item.gid}"),
+                         maxLines = 2,
+                         overflow = TextOverflow.Ellipsis,
+@@ -187,4 +202,5 @@ fun AnimatedVisibilityScope.DownloadPriorityScreen(navigator: DestinationsNaviga
+                         )
+                     }
++                    }
+                 }
+                 HorizontalDivider()
+@@ -208,2 +224,5 @@ fun AnimatedVisibilityScope.DownloadPriorityScreen(navigator: DestinationsNaviga
+ }
+ 
++private fun unescapeHtml(s: String): String =
++    runCatching { android.text.Html.fromHtml(s, android.text.Html.FROM_HTML_MODE_LEGACY).toString() }
++        .getOrDefault(s)
