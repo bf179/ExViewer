@@ -6,6 +6,11 @@ on:
     branches: [v2/ujui-direct, main]
   workflow_dispatch:
 
+# 同一分支连续推送时，取消上一轮还在跑的构建，避免并行堆叠
+concurrency:
+  group: build-direct-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest

@@ -1,0 +1,67 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt
+@@ -104,4 +104,5 @@ import com.ehviewer.core.util.logcat
+ import com.ehviewer.core.util.withIOContext
+ import com.ehviewer.core.util.withUIContext
++import com.ehviewer.core.database.model.WatchItem
+ import com.hippo.ehviewer.EhDB
+ import com.hippo.ehviewer.Settings
+@@ -141,4 +142,5 @@ import com.hippo.ehviewer.ui.startDownload
+ import com.hippo.ehviewer.ui.tools.DialogState
+ import com.hippo.ehviewer.ui.tools.awaitConfirmationOrCancel
++import com.hippo.ehviewer.ui.tools.awaitInputText
+ import com.hippo.ehviewer.ui.tools.awaitResult
+ import com.hippo.ehviewer.ui.tools.awaitSelectAction
+@@ -769,4 +771,27 @@ fun BelowHeader(galleryDetail: GalleryDetail, voteTag: VoteTag) {
+                             snackbar(filterAdded)
+                         }
++                        onSelect("关注此标签") {
++                            EhDB.watchItemDao().insert(
++                                WatchItem(kind = "tag", content = tag, createdAt = System.currentTimeMillis()),
++                            )
++                            snackbar("已关注：$tag")
++                        }
++                        onSelect("多选标签关注…") {
++                            val input = awaitInputText(
++                                initial = tag,
++                                title = "关注标签组",
++                                hint = "空格分隔多个标签，保存为「或」关系",
++                            )
++                            if (input != null && input.trim().isNotEmpty()) {
++                                val content = input.trim().split(" ", "\n", "\u3000")
++                                    .map { it.trim() }
++                                    .filter { it.isNotEmpty() }
++                                    .joinToString(" | ")
++                                EhDB.watchItemDao().insert(
++                                    WatchItem(kind = "group", content = content, createdAt = System.currentTimeMillis()),
++                                )
++                                snackbar("已关注标签组：$content")
++                            }
++                        }
+                         val papiUrl = Settings.papiUrl.value
+                         if (!papiUrl.isNullOrBlank()) {
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/WatchListScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/WatchListScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/WatchListScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/WatchListScreen.kt
+@@ -72,4 +72,20 @@ fun AnimatedVisibilityScope.WatchListScreen(navigator: DestinationsNavigator) =
+     }
+ 
++    // 旧版「隐藏列表」即关注列表的雏形：启动时一次性并入 watch_item（幂等，UNIQUE(kind,content) 去重）
++    LaunchedEffect(Unit) {
++        runCatching {
++            EhDB.getHideList().forEach { q ->
++                val kind = when (q.hideType) {
++                    1 -> "title"
++                    2 -> "uploader"
++                    3 -> "tag"
++                    else -> return@forEach
++                }
++                EhDB.watchItemDao().insert(
++                    WatchItem(kind = kind, content = q.name, createdAt = System.currentTimeMillis()),
++                )
++            }
++        }
++    }
+     LaunchedEffect(Unit) { reload() }
+ 
