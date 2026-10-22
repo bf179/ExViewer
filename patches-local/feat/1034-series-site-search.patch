@@ -1,0 +1,136 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
+@@ -2,5 +2,6 @@ package com.hippo.ehviewer.ui.screen
+ 
+ import androidx.compose.animation.AnimatedVisibilityScope
+-import androidx.compose.foundation.clickable
++import androidx.compose.foundation.ExperimentalFoundationApi
++import androidx.compose.foundation.combinedClickable
+ import androidx.compose.foundation.layout.Arrangement
+ import androidx.compose.foundation.layout.Column
+@@ -11,4 +12,5 @@ import androidx.compose.foundation.lazy.LazyColumn
+ import androidx.compose.foundation.lazy.items
+ import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.filled.Search
+ import androidx.compose.material.icons.filled.Sort
+ import androidx.compose.material.icons.filled.SwapVert
+@@ -37,4 +39,5 @@ import androidx.compose.ui.unit.dp
+ import com.hippo.ehviewer.client.ExlClient
+ import com.hippo.ehviewer.client.LocalQuery
++import com.hippo.ehviewer.client.SeriesKeyword
+ import com.hippo.ehviewer.ui.Screen
+ import com.hippo.ehviewer.ui.destinations.FeedSubScreenDestination
+@@ -51,4 +54,5 @@ import kotlinx.coroutines.launch
+  * 二级入口：优先订阅（feed_item）。
+  */
++@OptIn(ExperimentalFoundationApi::class)
+ @Destination<RootGraph>
+ @Composable
+@@ -95,4 +99,12 @@ fun AnimatedVisibilityScope.DownloadPriorityScreen(navigator: DestinationsNaviga
+                         Icon(Icons.Default.SwapVert, contentDescription = if (desc) "倒序" else "正序")
+                     }
++                    IconButton(onClick = {
++                        val kw = query.trim()
++                        if (kw.isNotEmpty()) {
++                            navigator.navigate(
++                                com.hippo.ehviewer.client.data.ListUrlBuilder().apply { keyword = kw }.asDst()
++                            )
++                        }
++                    }) { Icon(Icons.Default.Search, contentDescription = "站点搜索") }
+                     IconButton(onClick = { navigator.navigate(FeedSubScreenDestination()) }) {
+                         Icon(Icons.Default.Subscriptions, contentDescription = "优先订阅")
+@@ -130,5 +142,15 @@ fun AnimatedVisibilityScope.DownloadPriorityScreen(navigator: DestinationsNaviga
+                     modifier = Modifier
+                         .fillMaxWidth()
+-                        .clickable { navigator.navigate(item.displayGid asDstWith item.displayToken) }
++                        .combinedClickable(
++                            onClick = { navigator.navigate(item.displayGid asDstWith item.displayToken) },
++                            onLongClick = {
++                                val series = SeriesKeyword.extract(item.titleJpn ?: item.title)
++                                if (series.isNotEmpty()) {
++                                    navigator.navigate(
++                                        com.hippo.ehviewer.client.data.ListUrlBuilder().apply { keyword = series }.asDst()
++                                    )
++                                }
++                            },
++                        )
+                         .padding(horizontal = 16.dp, vertical = 8.dp),
+                     verticalArrangement = Arrangement.spacedBy(2.dp),
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/FeedSubScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/FeedSubScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/FeedSubScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/FeedSubScreen.kt
+@@ -2,5 +2,6 @@ package com.hippo.ehviewer.ui.screen
+ 
+ import androidx.compose.animation.AnimatedVisibilityScope
+-import androidx.compose.foundation.clickable
++import androidx.compose.foundation.ExperimentalFoundationApi
++import androidx.compose.foundation.combinedClickable
+ import androidx.compose.foundation.layout.Arrangement
+ import androidx.compose.foundation.layout.Column
+@@ -16,4 +17,5 @@ import androidx.compose.material.icons.filled.Add
+ import androidx.compose.material.icons.filled.Delete
+ import androidx.compose.material.icons.filled.Refresh
++import androidx.compose.material.icons.filled.Search
+ import androidx.compose.material3.AlertDialog
+ import androidx.compose.material3.HorizontalDivider
+@@ -43,4 +45,5 @@ import androidx.compose.ui.unit.dp
+ import com.hippo.ehviewer.client.ExlClient
+ import com.hippo.ehviewer.client.LocalQuery
++import com.hippo.ehviewer.client.SeriesKeyword
+ import com.hippo.ehviewer.ui.Screen
+ import com.hippo.ehviewer.ui.main.NavigationIcon
+@@ -54,4 +57,5 @@ import kotlinx.coroutines.launch
+  * 顶部是订阅管理（开关/删除/新增），下面是新作品流。
+  */
++@OptIn(ExperimentalFoundationApi::class)
+ @Destination<RootGraph>
+ @Composable
+@@ -96,4 +100,12 @@ fun AnimatedVisibilityScope.FeedSubScreen(navigator: DestinationsNavigator) = Sc
+                         Icon(Icons.Default.Add, contentDescription = "新增订阅")
+                     }
++                    IconButton(onClick = {
++                        val kw = query.trim()
++                        if (kw.isNotEmpty()) {
++                            navigator.navigate(
++                                com.hippo.ehviewer.client.data.ListUrlBuilder().apply { keyword = kw }.asDst()
++                            )
++                        }
++                    }) { Icon(Icons.Default.Search, contentDescription = "站点搜索") }
+                     IconButton(onClick = { scope.launch { reloadSubs(); load(reset = true) } }) {
+                         Icon(Icons.Default.Refresh, contentDescription = "刷新")
+@@ -171,5 +183,15 @@ fun AnimatedVisibilityScope.FeedSubScreen(navigator: DestinationsNavigator) = Sc
+                     modifier = Modifier
+                         .fillMaxWidth()
+-                        .clickable { navigator.navigate(item.displayGid asDstWith item.displayToken) }
++                        .combinedClickable(
++                            onClick = { navigator.navigate(item.displayGid asDstWith item.displayToken) },
++                            onLongClick = {
++                                val series = SeriesKeyword.extract(item.titleJpn ?: item.title)
++                                if (series.isNotEmpty()) {
++                                    navigator.navigate(
++                                        com.hippo.ehviewer.client.data.ListUrlBuilder().apply { keyword = series }.asDst()
++                                    )
++                                }
++                            },
++                        )
+                         .padding(horizontal = 16.dp, vertical = 8.dp),
+                     verticalArrangement = Arrangement.spacedBy(2.dp),
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/SeriesKeyword.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/SeriesKeyword.kt
+new file mode 100644
+--- /dev/null
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/SeriesKeyword.kt
+@@ -0,0 +1,13 @@
++package com.hippo.ehviewer.client
++
++/** 从画廊标题里提取「系列名」：优先取【】或 [] 内的内容，否则回退整条标题。 */
++object SeriesKeyword {
++    private val BRACKET = Regex("[【\\[]([^】\\]]{2,40})[】\\]]")
++
++    fun extract(title: String?): String {
++        val t = title?.trim().orEmpty()
++        if (t.isEmpty()) return ""
++        val m = BRACKET.find(t)
++        return m?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() } ?: t
++    }
++}
