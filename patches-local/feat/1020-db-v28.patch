@@ -106,6 +106,7 @@ new file mode 100644
 +
 +import androidx.room.ColumnInfo
 +import androidx.room.Entity
++import androidx.room.Index
 +import androidx.room.PrimaryKey
 +
 +/**
@@ -114,7 +115,10 @@ new file mode 100644
 + *
 + * level: origin | l2_renamed | l3_expunged
 + */
-+@Entity(tableName = "gallery_version")
++@Entity(
++    tableName = "gallery_version",
++    indices = [Index("root_gid"), Index("prev_gid")],
++)
 +data class GalleryVersion(
 +    @PrimaryKey
 +    @ColumnInfo(name = "gid")
@@ -145,6 +149,7 @@ new file mode 100644
 +
 +import androidx.room.ColumnInfo
 +import androidx.room.Entity
++import androidx.room.Index
 +import androidx.room.PrimaryKey
 +
 +/**
@@ -170,6 +175,7 @@ new file mode 100644
 +
 +import androidx.room.ColumnInfo
 +import androidx.room.Entity
++import androidx.room.Index
 +import androidx.room.Index
 +import androidx.room.PrimaryKey
 +
