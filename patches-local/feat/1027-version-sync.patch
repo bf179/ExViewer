@@ -1,0 +1,116 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
+@@ -25,4 +25,5 @@ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.withContext
+ import com.hippo.ehviewer.client.OriginSyncer
++import com.hippo.ehviewer.client.VersionSyncer
+ import com.hippo.ehviewer.Settings
+ import com.hippo.ehviewer.asMutableState
+@@ -60,4 +61,5 @@ fun AnimatedVisibilityScope.ExlSettingsScreen(navigator: DestinationsNavigator)
+     val addKeyword by Settings.addKeyword.collectAsState()
+     var originCount by remember { mutableStateOf(0) }
++    var versionCount by remember { mutableStateOf(0) }
+ 
+     // 打开 ExL 页时顺手同步一次来源索引（PQ / 优先订阅 / 已下架 → 本地 gallery_origin）
+@@ -65,4 +67,6 @@ fun AnimatedVisibilityScope.ExlSettingsScreen(navigator: DestinationsNavigator)
+         withContext(Dispatchers.IO) { runCatching { OriginSyncer.sync() } }
+         originCount = OriginSyncer.count()
++        withContext(Dispatchers.IO) { runCatching { VersionSyncer.sync() } }
++        versionCount = VersionSyncer.count()
+     }
+ 
+@@ -137,4 +141,12 @@ fun AnimatedVisibilityScope.ExlSettingsScreen(navigator: DestinationsNavigator)
+             }
+ 
++            Preference(title = "版本链", summary = "本地已记录 $versionCount 条「旧 gid → 新 gid」") {
++                scope.launch {
++                    versionCount = withContext(Dispatchers.IO) {
++                        runCatching { VersionSyncer.sync() }.getOrDefault(0)
++                    }
++                }
++            }
++
+             SectionTitle("列表显示（隐藏矩阵）")
+             SwitchPreference(
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/VersionSyncer.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/VersionSyncer.kt
+new file mode 100644
+--- /dev/null
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/VersionSyncer.kt
+@@ -0,0 +1,76 @@
++package com.hippo.ehviewer.client
++
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.setValue
++import com.ehviewer.core.database.model.GalleryVersion
++import com.hippo.ehviewer.EhDB
++import kotlinx.serialization.json.contentOrNull
++import kotlinx.serialization.json.intOrNull
++import kotlinx.serialization.json.jsonPrimitive
++import kotlinx.serialization.json.longOrNull
++
++/**
++ * 版本链同步：从服务端 /api version_since 增量拉取 gallery_version。
++ *
++ * 只做「旧 gid → 新 gid / 血脉根」的映射落地，不改动用户的收藏与进度数据：
++ * - 列表/详情展示时可 resolve 到新版
++ * - 收藏行仍保留旧 gid（可回滚，不删数据）
++ * - 真正的收藏/进度复制留到「跟随新版」开关打开时单独执行（见 EXL-SYSTEM.md §6.5）
++ */
++object VersionSyncer {
++    /** 上次同步进度（epoch ms），避免每次全量拉取 */
++    var lastSyncAt by mutableStateOf(0L)
++        private set
++
++    suspend fun sync(): Int {
++        val dao = EhDB.galleryVersionDao()
++        val sinceSec = dao.lastDetectedAt() / 1000
++        val items = ExlClient.versionSince(sinceSec)
++        if (items.isEmpty()) {
++            lastSyncAt = System.currentTimeMillis()
++            return 0
++        }
++        var n = 0
++        items.forEach { obj ->
++            val gid = obj["gid"]?.jsonPrimitive?.intOrNull ?: return@forEach
++            val root = obj["root_gid"]?.jsonPrimitive?.intOrNull ?: gid
++            val prev = obj["prev_gid"]?.jsonPrimitive?.intOrNull
++            val level = obj["level"]?.jsonPrimitive?.contentOrNull ?: "origin"
++            val ts = obj["ts"]?.jsonPrimitive?.longOrNull ?: 0L
++            dao.upsert(
++                GalleryVersion(
++                    gid = gid,
++                    rootGid = root,
++                    prevGid = prev,
++                    level = level,
++                    fingerprint = null,
++                    detectedAt = if (ts > 0) ts * 1000 else System.currentTimeMillis(),
++                ),
++            )
++            n++
++        }
++        lastSyncAt = System.currentTimeMillis()
++        return n
++    }
++
++    /**
++     * 解析到最终 gid：沿 prev_gid 链向前找，最多 5 跳，带环检测。
++     * 返回 (最终 gid, 链上经过的跳数)。
++     */
++    suspend fun resolve(gid: Long): Pair<Long, Int> {
++        val dao = EhDB.galleryVersionDao()
++        var current = gid.toInt()
++        val seen = HashSet<Int>()
++        var hops = 0
++        while (hops < 5 && seen.add(current)) {
++            val next = dao.successor(current) ?: break
++            current = next
++            hops++
++        }
++        return current.toLong() to hops
++    }
++
++    suspend fun count(): Int = EhDB.galleryVersionDao().count()
++}
++
