@@ -1,0 +1,62 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
+@@ -13,4 +13,5 @@ import androidx.compose.material3.TopAppBarDefaults
+ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.getValue
++import androidx.compose.runtime.remember
+ import androidx.compose.runtime.rememberCoroutineScope
+ import androidx.compose.ui.Modifier
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt
+@@ -55,4 +55,5 @@ import com.ehviewer.core.util.toLocalDateTime
+ import com.ehviewer.core.util.withIOContext
+ import com.hippo.ehviewer.EhDB
++import com.hippo.ehviewer.client.ExlClient
+ import com.hippo.ehviewer.Settings
+ import com.hippo.ehviewer.client.EhEngine
+@@ -309,5 +310,8 @@ suspend fun doGalleryInfoAction(info: BaseGalleryInfo) {
+             add(Icons.AutoMirrored.Default.DriveFileMove to R.string.download_move_dialog_title)
+         }
++        // 自有：加入下载优先队列（PAPI）
++        add(Icons.Default.QueueMusic to R.string.add_to_pq)
+     }
++    val pqIndex = items.size - 1
+     val selected = awaitSelectItemWithIcon(items, EhUtils.getSuitableTitle(info))
+     when (selected) {
+@@ -321,4 +325,13 @@ suspend fun doGalleryInfoAction(info: BaseGalleryInfo) {
+             startDownload(false, info)
+         }
++        pqIndex -> {
++            runSuspendCatching {
++                ExlClient.pqAdd("${info.gid}_${info.token}")
++            }.onSuccess {
++                tip(R.string.add_to_pq_success)
++            }.onFailure {
++                tip(R.string.add_to_pq_failure)
++            }
++        }
+         2 -> if (favorited) {
+             runSuspendCatching {
+diff --git a/core/i18n/src/commonMain/moko-resources/base/strings.xml b/core/i18n/src/commonMain/moko-resources/base/strings.xml
+--- a/core/i18n/src/commonMain/moko-resources/base/strings.xml
++++ b/core/i18n/src/commonMain/moko-resources/base/strings.xml
+@@ -642,3 +642,6 @@
+     <!-- Tachiyomi Reader End-->
+     <string name="watch_list">Watch</string>
++    <string name="add_to_pq">Add to download queue</string>
++    <string name="add_to_pq_success">Added to download queue</string>
++    <string name="add_to_pq_failure">Failed to add to queue</string>
+ </resources>
+diff --git a/core/i18n/src/commonMain/moko-resources/zh-rCN/strings.xml b/core/i18n/src/commonMain/moko-resources/zh-rCN/strings.xml
+--- a/core/i18n/src/commonMain/moko-resources/zh-rCN/strings.xml
++++ b/core/i18n/src/commonMain/moko-resources/zh-rCN/strings.xml
+@@ -624,3 +624,6 @@
+     <!-- Tachiyomi Reader End-->
+     <string name="watch_list">关注</string>
++    <string name="add_to_pq">加入下载优先队列</string>
++    <string name="add_to_pq_success">已加入下载优先队列</string>
++    <string name="add_to_pq_failure">加入失败</string>
+ </resources>
+\ No newline at end of file
