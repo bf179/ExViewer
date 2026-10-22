@@ -1,0 +1,184 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
+@@ -36,4 +36,5 @@ import androidx.compose.ui.text.style.TextOverflow
+ import androidx.compose.ui.unit.dp
+ import com.hippo.ehviewer.client.ExlClient
++import com.hippo.ehviewer.client.LocalQuery
+ import com.hippo.ehviewer.ui.Screen
+ import com.hippo.ehviewer.ui.destinations.FeedSubScreenDestination
+@@ -61,4 +62,5 @@ fun AnimatedVisibilityScope.DownloadPriorityScreen(navigator: DestinationsNaviga
+     var loading by remember { mutableStateOf(false) }
+     var total by remember { mutableStateOf(0) }
++    var query by remember { mutableStateOf("") }
+ 
+     suspend fun load(reset: Boolean) {
+@@ -106,11 +108,23 @@ fun AnimatedVisibilityScope.DownloadPriorityScreen(navigator: DestinationsNaviga
+         ) {
+             item(key = "head") {
+-                Text(
+-                    text = if (sortByUpdated) "排序：近期更新（${if (desc) "↓" else "↑"}）" else "排序：加入时间（${if (desc) "↓" else "↑"}）",
+-                    style = MaterialTheme.typography.labelMedium,
+-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+-                )
++                Column {
++                    androidx.compose.material3.OutlinedTextField(
++                        value = query,
++                        onValueChange = { query = it },
++                        label = { Text("本地搜索（支持 -排除 | 或 ~模糊）") },
++                        singleLine = true,
++                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
++                    )
++                    Text(
++                        text = if (sortByUpdated) "排序：近期更新（${if (desc) "↓" else "↑"}）" else "排序：加入时间（${if (desc) "↓" else "↑"}）",
++                        style = MaterialTheme.typography.labelMedium,
++                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
++                    )
++                }
++            }
++            val shown = items.filter {
++                LocalQuery.matches(query, it.title, it.title_jpn, it.uploader, it.category)
+             }
+-            items(items, key = { it.gid }) { item ->
++            items(shown, key = { it.gid }) { item ->
+                 Column(
+                     modifier = Modifier
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/FeedSubScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/FeedSubScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/FeedSubScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/FeedSubScreen.kt
+@@ -42,4 +42,5 @@ import androidx.compose.ui.text.style.TextOverflow
+ import androidx.compose.ui.unit.dp
+ import com.hippo.ehviewer.client.ExlClient
++import com.hippo.ehviewer.client.LocalQuery
+ import com.hippo.ehviewer.ui.Screen
+ import com.hippo.ehviewer.ui.main.NavigationIcon
+@@ -63,4 +64,5 @@ fun AnimatedVisibilityScope.FeedSubScreen(navigator: DestinationsNavigator) = Sc
+     var loading by remember { mutableStateOf(false) }
+     var showAdd by remember { mutableStateOf(false) }
++    var query by remember { mutableStateOf("") }
+ 
+     suspend fun reloadSubs() {
+@@ -147,11 +149,23 @@ fun AnimatedVisibilityScope.FeedSubScreen(navigator: DestinationsNavigator) = Sc
+             item(key = "divider") { HorizontalDivider() }
+             item(key = "items_head") {
+-                Text(
+-                    text = "新作品（${items.size}）",
+-                    style = MaterialTheme.typography.labelMedium,
+-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+-                )
++                Column {
++                    androidx.compose.material3.OutlinedTextField(
++                        value = query,
++                        onValueChange = { query = it },
++                        label = { Text("本地搜索（支持 -排除 | 或 ~模糊）") },
++                        singleLine = true,
++                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
++                    )
++                    Text(
++                        text = "新作品（${items.size}）",
++                        style = MaterialTheme.typography.labelMedium,
++                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
++                    )
++                }
++            }
++            val shownItems = items.filter {
++                LocalQuery.matches(query, it.title, it.title_jpn, it.uploader, it.category)
+             }
+-            items(items, key = { "f_${it.gid}" }) { item ->
++            items(shownItems, key = { "f_${it.gid}" }) { item ->
+                 Column(
+                     modifier = Modifier
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/LocalQuery.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/LocalQuery.kt
+new file mode 100644
+--- /dev/null
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/LocalQuery.kt
+@@ -0,0 +1,89 @@
++package com.hippo.ehviewer.client
++
++/**
++ * 本地搜索表达式（与站点语法同构的简化实现）：
++ *
++ *   tag              包含子串
++ *   -tag             排除
++ *   "多词短语"        整体匹配
++ *   ~foo             模糊（忽略大小写与空格）
++ *   namespace:value  精确前缀（如 artist:xxx）
++ *   空格             AND
++ *   |                OR（优先级最低）
++ *
++ * 只做「元数据字段的包含/排除」，不联网。
++ */
++object LocalQuery {
++    data class Token(val text: String, val negate: Boolean, val fuzzy: Boolean)
++
++    private fun tokenize(query: String): List<List<Token>> {
++        // 先按 | 切成 OR 组，再按空格切 AND
++        return query.split("|").map { group ->
++            val tokens = mutableListOf<Token>()
++            var i = 0
++            val s = group.trim()
++            val sb = StringBuilder()
++            var negate = false
++            var fuzzy = false
++            var inQuote = false
++            fun flush() {
++                val t = sb.toString().trim()
++                if (t.isNotEmpty()) tokens.add(Token(t, negate, fuzzy))
++                sb.clear()
++                negate = false
++                fuzzy = false
++            }
++            while (i < s.length) {
++                val c = s[i]
++                when {
++                    c == '"' -> {
++                        inQuote = !inQuote
++                        i++
++                    }
++                    !inQuote && c.isWhitespace() -> {
++                        flush()
++                        i++
++                    }
++                    !inQuote && c == '-' && sb.isEmpty() -> {
++                        negate = true
++                        i++
++                    }
++                    !inQuote && c == '~' && sb.isEmpty() -> {
++                        fuzzy = true
++                        i++
++                    }
++                    else -> {
++                        sb.append(c)
++                        i++
++                    }
++                }
++            }
++            flush()
++            tokens
++        }.filter { it.isNotEmpty() }
++    }
++
++    private fun Token.hit(haystacks: List<String?>): Boolean {
++        val needles = haystacks.mapNotNull { it?.lowercase() }
++        return if (fuzzy) {
++            val n = text.lowercase().replace(" ", "")
++            needles.any { it.replace(" ", "").contains(n) }
++        } else {
++            val n = text.lowercase()
++            needles.any { it.contains(n) }
++        }
++    }
++
++    /** 空查询恒为 true。 */
++    fun matches(query: String, vararg fields: String?): Boolean {
++        val q = query.trim()
++        if (q.isEmpty()) return true
++        val groups = tokenize(q)
++        if (groups.isEmpty()) return true
++        val hay = fields.toList()
++        return groups.any { andGroup ->
++            andGroup.all { tok -> if (tok.negate) !tok.hit(hay) else tok.hit(hay) }
++        }
++    }
++}
++
