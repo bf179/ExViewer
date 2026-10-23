@@ -1,0 +1,91 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt
+@@ -18,8 +18,11 @@ import androidx.compose.foundation.layout.WindowInsets
+ import androidx.compose.foundation.layout.fillMaxSize
+ import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.heightIn
+ import androidx.compose.foundation.layout.height
+ import androidx.compose.foundation.layout.padding
+ import androidx.compose.foundation.layout.size
+ import androidx.compose.foundation.layout.width
++import androidx.compose.foundation.lazy.items
++import androidx.compose.foundation.lazy.LazyColumn
+ import androidx.compose.foundation.lazy.grid.GridCells
+ import androidx.compose.foundation.lazy.grid.GridItemSpan
+@@ -30,4 +33,5 @@ import androidx.compose.material.icons.Icons
+ import androidx.compose.material.icons.filled.FolderZip
+ import androidx.compose.material.icons.filled.Search
++import androidx.compose.material3.Checkbox
+ import androidx.compose.material3.Button
+ import androidx.compose.material3.ButtonDefaults
+@@ -44,4 +48,5 @@ import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.mutableIntStateOf
+ import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.mutableStateListOf
+ import androidx.compose.runtime.remember
+ import androidx.compose.runtime.saveable.rememberSaveable
+@@ -112,4 +117,6 @@ import com.hippo.ehviewer.client.EhUrl
+ import com.hippo.ehviewer.client.PqApiRequest
+ import com.hippo.ehviewer.client.sendPqApiRequest
++import com.hippo.ehviewer.client.watchContentOf
++import com.hippo.ehviewer.client.watchKindOf
+ import com.hippo.ehviewer.client.DEFAULT_USER
+ import com.hippo.ehviewer.client.EhUtils
+@@ -772,20 +779,46 @@ fun BelowHeader(galleryDetail: GalleryDetail, voteTag: VoteTag) {
+                         }
+                         onSelect("关注此标签") {
++                            val kind = watchKindOf(tag)
++                            val content = watchContentOf(tag, kind)
+                             EhDB.watchItemDao().insert(
+-                                WatchItem(kind = "tag", content = tag, createdAt = System.currentTimeMillis()),
++                                WatchItem(kind = kind, content = content, createdAt = System.currentTimeMillis()),
+                             )
+                             snackbar("已关注：$tag")
+                         }
+                         onSelect("多选标签关注…") {
+-                            val input = awaitInputText(
+-                                initial = tag,
+-                                title = "关注标签组",
+-                                hint = "空格分隔多个标签，保存为「或」关系",
++                            val allTags = galleryDetail.tagGroups
++                                .filter { it.namespace.value != "language" }
++                                .flatMap { g -> g.tags.map { "${g.namespace.value}:${it.text}" } }
++                            val picked = mutableStateListOf<String>()
++                            if (allTags.contains(tag)) picked.add(tag)
++                            awaitConfirmationOrCancel(
++                                text = {
++                                    Column(modifier = Modifier.heightIn(max = 380.dp)) {
++                                        Text(
++                                            text = "勾选要关注的标签（或关系，共 ${allTags.size} 个）",
++                                            style = MaterialTheme.typography.labelMedium,
++                                        )
++                                        LazyColumn(modifier = Modifier.padding(top = 8.dp)) {
++                                            items(allTags) { t2 ->
++                                                val checked = picked.contains(t2)
++                                                Row(
++                                                    modifier = Modifier
++                                                        .fillMaxWidth()
++                                                        .clickable {
++                                                            if (checked) picked.remove(t2) else picked.add(t2)
++                                                        }
++                                                        .padding(vertical = 4.dp),
++                                                    verticalAlignment = Alignment.CenterVertically,
++                                                ) {
++                                                    Checkbox(checked = checked, onCheckedChange = null)
++                                                    Text(text = t2, style = MaterialTheme.typography.bodyMedium)
++                                                }
++                                            }
++                                        }
++                                    }
++                                },
+                             )
+-                            if (input != null && input.trim().isNotEmpty()) {
+-                                val content = input.trim().split(" ", "\n", "\u3000")
+-                                    .map { it.trim() }
+-                                    .filter { it.isNotEmpty() }
+-                                    .joinToString(" | ")
++                            if (picked.isNotEmpty()) {
++                                val content = picked.joinToString(" | ")
+                                 EhDB.watchItemDao().insert(
+                                     WatchItem(kind = "group", content = content, createdAt = System.currentTimeMillis()),
