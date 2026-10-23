@@ -1,7 +1,7 @@
 diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/QuickBlockScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/QuickBlockScreen.kt
 --- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/QuickBlockScreen.kt
 +++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/QuickBlockScreen.kt
-@@ -135,14 +135,11 @@ private fun modeLabel(mode: FilterMode): String = when (mode) {
+@@ -135,14 +135,10 @@ private fun modeLabel(mode: FilterMode): String = when (mode) {
  internal fun detectFilterMode(text: String): FilterMode {
      val t = text.trim()
 -    if (t.isEmpty()) return FilterMode.TITLE
@@ -17,8 +17,7 @@ diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/QuickBlockScreen
 -        tagLike >= 1 -> FilterMode.TAG_GROUP
 -        else -> FilterMode.TITLE
 -    }
-+    val tokens = t.split(' ', '
-+', '　').filter { it.isNotBlank() }
++    val tokens = t.split(' ').flatMap { it.split('　') }.filter { it.isNotBlank() }
 +    return if (tokens.size > 1 || t.endsWith("$")) FilterMode.TAG_GROUP else FilterMode.TAG
  }
  
