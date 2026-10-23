@@ -1,0 +1,71 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/WatchClassify.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/WatchClassify.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/client/WatchClassify.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/WatchClassify.kt
+@@ -8,5 +8,13 @@ import com.ehviewer.core.database.model.FilterMode
+  */
+ 
+-/** uploader:xxx / artist:xxx / group:xxx / tag:xxx → 对应 kind；其余（含空格多词）视为标题 */
++/**
++ * 关注项类型判定（对齐旧版 FilterAlt 的思路）：
++ *   "带引号的短语"      → 标题
++ *   uploader:xxx       → 上传者
++ *   artist:xxx         → 艺术家
++ *   group:xxx          → 社团
++ *   空格分隔的多个标签   → 标签组（或）
++ *   其余单个 token      → 标签
++ */
+ fun watchKindOf(raw: String): String {
+     val t = raw.trim()
+@@ -16,5 +24,7 @@ fun watchKindOf(raw: String): String {
+         t.startsWith("group:", true) -> "circle"
+         t.startsWith("tag:", true) -> "tag"
+-        else -> "title"
++        t.length > 1 && t.startsWith("\"") && t.endsWith("\"") -> "title"
++        !t.contains(":") && t.split(" ").count { it.isNotBlank() } > 1 -> "group"
++        else -> "tag"
+     }
+ }
+@@ -27,5 +37,5 @@ fun watchKindOf(raw: String): String {
+ fun watchContentOf(raw: String, kind: String = watchKindOf(raw)): String {
+     val t = raw.trim()
+-    if (kind == "title") return t
++    if (kind == "title") return t.trim().removeSurrounding("\"")
+     val body = if (t.contains(":")) t.substringAfter(':').trim() else t
+     val tokens = body.split(" ", "\n", "\u3000").map { it.trim() }.filter { it.isNotEmpty() }
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/WatchListScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/WatchListScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/WatchListScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/WatchListScreen.kt
+@@ -76,12 +76,16 @@ fun AnimatedVisibilityScope.WatchListScreen(navigator: DestinationsNavigator) =
+         runCatching {
+             EhDB.getHideList().forEach { q ->
+-                val kind = when (q.hideType) {
+-                    1 -> "title"
+-                    2 -> "uploader"
+-                    3 -> "tag"
+-                    else -> return@forEach
++                val raw = q.name.trim()
++                val (kind, content) = when {
++                    raw.startsWith("artist:", true) -> "artist" to raw.substringAfter(':').trim()
++                    raw.startsWith("group:", true) -> "circle" to raw.substringAfter(':').trim()
++                    raw.startsWith("uploader:", true) -> "uploader" to raw.substringAfter(':').trim()
++                    raw.startsWith("tag:", true) -> "tag" to raw.substringAfter(':').trim()
++                    q.hideType == 1 -> "title" to raw
++                    q.hideType == 2 -> "uploader" to raw
++                    else -> "tag" to raw
+                 }
+                 EhDB.watchItemDao().insert(
+-                    WatchItem(kind = kind, content = q.name, createdAt = System.currentTimeMillis()),
++                    WatchItem(kind = kind, content = content, createdAt = System.currentTimeMillis()),
+                 )
+             }
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
+@@ -111,7 +111,4 @@ fun AnimatedVisibilityScope.ExlSettingsScreen(navigator: DestinationsNavigator)
+                 navigator.navigate(FilterScreenDestination())
+             }
+-            Preference(title = "隐藏规则", summary = "跨端同步的隐藏列表") {
+-                navigator.navigate(HideListScreenDestination())
+-            }
+             Preference(title = "已下架汇总", summary = "expunged 的画廊单独列出（不删不隐藏）") {
+                 navigator.navigate(ExpungedScreenDestination())
