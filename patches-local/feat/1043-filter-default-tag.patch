@@ -1,0 +1,24 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/QuickBlockScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/QuickBlockScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/QuickBlockScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/QuickBlockScreen.kt
+@@ -135,14 +135,11 @@ private fun modeLabel(mode: FilterMode): String = when (mode) {
+ internal fun detectFilterMode(text: String): FilterMode {
+     val t = text.trim()
+-    if (t.isEmpty()) return FilterMode.TITLE
++    if (t.isEmpty()) return FilterMode.TAG
++    // 与旧版 FilterAlt 一致：引号短语=标题；uploader:=上传者；多 token / 带 $ = 复合标签；其余=单标签
++    if (t.length > 1 && t.startsWith("\"") && t.endsWith("\"")) return FilterMode.TITLE
+     if (t.startsWith("uploader:", true)) return FilterMode.UPLOADER
+-    val tokens = t.split(" ", "\n").filter { it.isNotBlank() }
+-    val tagLike = tokens.count { it.contains(":") && !it.startsWith("-") }
+-    return when {
+-        tagLike >= 2 -> FilterMode.TAG_GROUP
+-        tagLike == 1 && tokens.size == 1 -> FilterMode.TAG
+-        tagLike >= 1 -> FilterMode.TAG_GROUP
+-        else -> FilterMode.TITLE
+-    }
++    val tokens = t.split(' ', '
++', '　').filter { it.isNotBlank() }
++    return if (tokens.size > 1 || t.endsWith("$")) FilterMode.TAG_GROUP else FilterMode.TAG
+ }
+ 
