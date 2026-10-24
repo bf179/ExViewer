@@ -1,0 +1,63 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/SettingsScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/SettingsScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/SettingsScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/SettingsScreen.kt
+@@ -9,4 +9,5 @@ import androidx.compose.material.icons.filled.Download
+ import androidx.compose.material.icons.filled.Info
+ import androidx.compose.material.icons.filled.Security
++import androidx.compose.material.icons.filled.Star
+ import androidx.compose.material.icons.filled.Sync
+ import androidx.compose.material.icons.filled.VisibilityOff
+@@ -27,4 +28,5 @@ import com.hippo.ehviewer.ui.destinations.AdvancedScreenDestination
+ import com.hippo.ehviewer.ui.destinations.DownloadScreenDestination
+ import com.hippo.ehviewer.ui.destinations.EhScreenDestination
++import com.hippo.ehviewer.ui.destinations.ExlSettingsScreenDestination
+ import com.hippo.ehviewer.ui.destinations.SyncHideScreenDestination
+ import com.hippo.ehviewer.ui.destinations.HideListScreenDestination
+@@ -68,7 +70,7 @@ fun AnimatedVisibilityScope.SettingsScreen(navigator: DestinationsNavigator) = S
+             )
+             PreferenceHeader(
+-                icon = Icons.Default.Sync,
+-                title = R.string.sync_and_hide,
+-                childRoute = SyncHideScreenDestination,
++                icon = Icons.Default.Star,
++                title = R.string.exl_enhance,
++                childRoute = ExlSettingsScreenDestination,
+                 navigator = navigator,
+             )
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/EhScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/EhScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/EhScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/EhScreen.kt
+@@ -253,8 +253,4 @@ fun AnimatedVisibilityScope.EhScreen(navigator: DestinationsNavigator) = Screen(
+                 )
+             }
+-            Preference(
+-                title = "ExL 增强",
+-                summary = "服务端 / 屏蔽与过滤 / 列表显示 / 关注与订阅 / 工具",
+-            ) { navigate(ExlSettingsScreenDestination) }
+             Preference(
+                 title = "快速搜索管理",
+diff --git a/core/i18n/src/commonMain/moko-resources/base/strings.xml b/core/i18n/src/commonMain/moko-resources/base/strings.xml
+--- a/core/i18n/src/commonMain/moko-resources/base/strings.xml
++++ b/core/i18n/src/commonMain/moko-resources/base/strings.xml
+@@ -645,3 +645,4 @@
+     <string name="add_to_pq_success">Added to download queue</string>
+     <string name="add_to_pq_failure">Failed to add to queue</string>
++    <string name="exl_enhance">ExL Enhancements</string>
+ </resources>
+diff --git a/core/i18n/src/commonMain/moko-resources/zh-rCN/strings.xml b/core/i18n/src/commonMain/moko-resources/zh-rCN/strings.xml
+--- a/core/i18n/src/commonMain/moko-resources/zh-rCN/strings.xml
++++ b/core/i18n/src/commonMain/moko-resources/zh-rCN/strings.xml
+@@ -627,3 +627,4 @@
+     <string name="add_to_pq_success">已加入下载优先队列</string>
+     <string name="add_to_pq_failure">加入失败</string>
++    <string name="exl_enhance">ExL 增强</string>
+ </resources>
+\ No newline at end of file
+diff --git a/core/i18n/src/commonMain/moko-resources/zh-rHK/strings.xml b/core/i18n/src/commonMain/moko-resources/zh-rHK/strings.xml
+--- a/core/i18n/src/commonMain/moko-resources/zh-rHK/strings.xml
++++ b/core/i18n/src/commonMain/moko-resources/zh-rHK/strings.xml
+@@ -501,3 +501,4 @@
+     <!-- Tachiyomi Reader End-->
+     <string name="watch_list">關注</string>
++    <string name="exl_enhance">ExL 增強</string>
+ </resources>
