@@ -1,0 +1,77 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt
+@@ -191,10 +191,29 @@ suspend fun startDownload(forceDefault: Boolean, vararg galleryInfos: BaseGaller
+ }
+ 
++/** 快捷收藏的串行闸门：云端槽位写入按收藏夹地址类型限流，本地收藏不限流 */
++private val quickFavMutex = Mutex()
++
++/**
++ * 快捷收藏：长按/点收藏时不做选择直接写入默认收藏夹。
++ * - 默认收藏夹未配置（-2）→ 落到本地收藏
++ * - 云端槽位（>= 0）→ 串行 + 间隔，避免触发站点频率限制
++ */
++context(_: DialogState)
++suspend fun quickFavorite(galleryInfo: GalleryInfo): Boolean = quickFavMutex.withLock {
++    val slot = Settings.defaultFavSlot.value
++    if (slot >= 0) delay(1200)
++    modifyFavorites(galleryInfo, quick = true)
++}
++
+ context(_: DialogState)
+-suspend fun modifyFavorites(galleryInfo: GalleryInfo): Boolean {
++suspend fun modifyFavorites(galleryInfo: GalleryInfo, quick: Boolean = false): Boolean {
+     val localFavorited = EhDB.containLocalFavorites(galleryInfo.gid)
+     if (Settings.hasSignedIn.value) {
+         val isFavorited = galleryInfo.favoriteSlot != NOT_FAVORITED
+         val defaultFavSlot = Settings.defaultFavSlot.value
++        if (defaultFavSlot == -2 && quick) {
++            // 快捷收藏且没配默认收藏夹：直接进本地收藏，不弹选择框
++            return doModifyFavorites(galleryInfo, LOCAL_FAVORITED, localFavorited)
++        }
+         if (defaultFavSlot == -2) {
+             val localFav = getFavoriteIcon(localFavorited) to appCtx.getString(R.string.local_favorites)
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt
+@@ -131,4 +131,5 @@ import com.hippo.ehviewer.ktbuilder.executeIn
+ import com.hippo.ehviewer.ktbuilder.imageRequest
+ import com.hippo.ehviewer.ui.GalleryInfoBottomSheet
++import com.hippo.ehviewer.ui.quickFavorite
+ import com.hippo.ehviewer.ui.MainActivity
+ import com.hippo.ehviewer.ui.confirmRemoveDownload
+@@ -510,5 +511,9 @@ fun BelowHeader(galleryDetail: GalleryDetail, voteTag: VoteTag) {
+                         favoritesLock.mutate {
+                             runSuspendCatching {
+-                                modifyFavorites(galleryDetail)
++                                if (Settings.quickFav.value) {
++                                    quickFavorite(galleryDetail.galleryInfo)
++                                } else {
++                                    modifyFavorites(galleryDetail)
++                                }
+                             }.onSuccess { add ->
+                                 if (add) {
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
+@@ -129,4 +129,5 @@ import com.hippo.ehviewer.client.parser.GalleryDetailUrlParser
+ import com.hippo.ehviewer.client.parser.GalleryPageUrlParser
+ import com.hippo.ehviewer.collectAsState
++import com.hippo.ehviewer.ui.quickFavorite
+ import com.hippo.ehviewer.ui.DrawerHandle
+ import com.hippo.ehviewer.ui.BATCH_STATUS_INTERRUPTED
+@@ -597,5 +598,5 @@ fun AnimatedVisibilityScope.GalleryListScreen(
+                         launch {
+                             if (Settings.quickFav.value && info.favoriteSlot == GalleryInfo.NOT_FAVORITED) {
+-                                val ok = runCatching { modifyFavorites(info) }.getOrNull() == true
++                                val ok = runCatching { quickFavorite(info) }.getOrNull() == true
+                                 snackbar(string(if (ok) R.string.add_to_favorite_success else R.string.add_to_favorite_failure))
+                             } else {
+@@ -617,5 +618,5 @@ fun AnimatedVisibilityScope.GalleryListScreen(
+                         launch {
+                             if (Settings.quickFav.value && info.favoriteSlot == GalleryInfo.NOT_FAVORITED) {
+-                                val ok = runCatching { modifyFavorites(info) }.getOrNull() == true
++                                val ok = runCatching { quickFavorite(info) }.getOrNull() == true
+                                 snackbar(string(if (ok) R.string.add_to_favorite_success else R.string.add_to_favorite_failure))
+                             } else {
