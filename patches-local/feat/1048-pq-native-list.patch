@@ -1,0 +1,101 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
+@@ -43,9 +43,14 @@ import androidx.compose.ui.text.style.TextOverflow
+ import androidx.compose.ui.unit.dp
+ import coil3.compose.AsyncImage
++import com.ehviewer.core.model.BaseGalleryInfo
++import com.hippo.ehviewer.client.EhUtils
++import com.hippo.ehviewer.client.getThumbKey
+ import com.hippo.ehviewer.client.ExlClient
+ import com.hippo.ehviewer.client.LocalQuery
+ import com.hippo.ehviewer.client.SeriesKeyword
++import com.hippo.ehviewer.ui.doGalleryInfoAction
+ import com.hippo.ehviewer.ui.Screen
+ import com.hippo.ehviewer.ui.destinations.FeedSubScreenDestination
++import com.hippo.ehviewer.ui.main.GalleryInfoListItem
+ import com.hippo.ehviewer.ui.main.NavigationIcon
+ import com.hippo.ehviewer.ui.screen.asDstWith
+@@ -145,64 +150,24 @@ fun AnimatedVisibilityScope.DownloadPriorityScreen(navigator: DestinationsNaviga
+             }
+             items(shown, key = { it.gid }) { item ->
+-                Row(
+-                    modifier = Modifier
+-                        .fillMaxWidth()
+-                        .combinedClickable(
+-                            onClick = { navigator.navigate(item.displayGid asDstWith item.displayToken) },
+-                            onLongClick = {
+-                                val series = SeriesKeyword.extract(item.title_jpn ?: item.title)
+-                                if (series.isNotEmpty()) {
+-                                    navigator.navigate(
+-                                        com.hippo.ehviewer.client.data.ListUrlBuilder().apply { keyword = series }.asDst()
+-                                    )
+-                                }
+-                            },
+-                        )
+-                        .padding(horizontal = 12.dp, vertical = 6.dp),
+-                    verticalAlignment = Alignment.CenterVertically,
+-                ) {
+-                    AsyncImage(
+-                        model = item.thumb,
+-                        contentDescription = null,
+-                        modifier = Modifier.size(width = 72.dp, height = 96.dp).clip(RoundedCornerShape(4.dp)),
+-                        contentScale = ContentScale.Crop,
+-                    )
+-                    Column(
+-                        modifier = Modifier.padding(start = 8.dp).weight(1f),
+-                        verticalArrangement = Arrangement.spacedBy(2.dp),
+-                    ) {
+-                    Text(
+-                        text = unescapeHtml(item.title ?: item.title_jpn ?: "#${item.gid}"),
+-                        maxLines = 2,
+-                        overflow = TextOverflow.Ellipsis,
+-                        style = MaterialTheme.typography.bodyMedium,
++                val gi = remember(item.gid) {
++                    BaseGalleryInfo(
++                        gid = if (item.displayGid != 0L) item.displayGid else item.gid,
++                        token = item.displayToken.ifBlank { item.token },
++                        title = item.title,
++                        titleJpn = item.title_jpn,
++                        thumbKey = item.thumb?.let { runCatching { getThumbKey(it) }.getOrNull() },
++                        category = EhUtils.getCategory(item.category),
++                        uploader = item.uploader,
++                        rating = item.rating,
++                        favoriteSlot = item.fav_status,
+                     )
+-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+-                        Text(
+-                            text = listOfNotNull(
+-                                item.uploader?.takeIf { it.isNotBlank() },
+-                                item.category,
+-                                "${item.filecount}P",
+-                            ).joinToString(" · "),
+-                            style = MaterialTheme.typography.bodySmall,
+-                            maxLines = 1,
+-                            overflow = TextOverflow.Ellipsis,
+-                        )
+-                    }
+-                    val badges = buildList {
+-                        if (item.replaced == 1) add("↻ 新版")
+-                        if (item.expunged == 1) add("已下架")
+-                        if (item.downloadedLatest > 0) add("已下载") else if (item.isfin == 1) add("已下 · 旧版")
+-                    }
+-                    if (badges.isNotEmpty()) {
+-                        Text(
+-                            text = badges.joinToString("  "),
+-                            style = MaterialTheme.typography.labelSmall,
+-                            color = MaterialTheme.colorScheme.primary,
+-                        )
+-                    }
+-                    }
+                 }
+-                HorizontalDivider()
++                GalleryInfoListItem(
++                    onClick = { navigator.navigate(gi.asDst()) },
++                    onLongClick = { scope.launch { doGalleryInfoAction(gi) } },
++                    info = gi,
++                    showPages = false,
++                    showProgress = true,
++                )
+             }
+             item(key = "more") {
