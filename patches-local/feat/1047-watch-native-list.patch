@@ -1,0 +1,252 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/ExlClient.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/ExlClient.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/client/ExlClient.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/ExlClient.kt
+@@ -210,4 +210,51 @@ object ExlClient {
+         return runCatching { obj["items"]!!.jsonArray.map { it.jsonObject } }.getOrDefault(emptyList())
+     }
++
++    // ===== 关注页：服务端按关注项抓取的画廊 =====
++
++    @Serializable
++    data class WatchGalleryItem(
++        val gid: Long = 0,
++        val token: String = "",
++        val title: String? = null,
++        val title_jpn: String? = null,
++        val thumb: String? = null,
++        val category: String? = null,
++        val uploader: String? = null,
++        val posted: Long = 0,
++        val filecount: Int = 0,
++        val filesize: Long = 0,
++        val rating: Float = 0f,
++        val expunged: Int = 0,
++        val fav_status: Int = 0,
++    )
++
++    suspend fun watchGalleries(page: Int, pageSize: Int = 30, order: String = "new"): Pair<List<WatchGalleryItem>, Int> {
++        val obj = call("watch_galleries", buildJsonObject {
++            put("page", page)
++            put("page_size", pageSize)
++            put("order", order)
++        })?.data() ?: return emptyList<WatchGalleryItem>() to 0
++        val items = runCatching {
++            obj["items"]!!.jsonArray.map { json.decodeFromJsonElement(WatchGalleryItem.serializer(), it) }
++        }.getOrDefault(emptyList())
++        val total = runCatching { obj["total"]!!.jsonPrimitive.intOrNull ?: items.size }.getOrDefault(items.size)
++        return items to total
++    }
++
++    /** 把本地关注项整份推到服务端（kind, content, enabled）。 */
++    suspend fun watchSync(items: List<Triple<String, String, Boolean>>): Boolean {
++        val arr = buildJsonArray {
++            items.forEach { (kind, content, enabled) ->
++                add(buildJsonObject {
++                    put("kind", kind)
++                    put("content", content)
++                    put("enabled", if (enabled) 1 else 0)
++                })
++            }
++        }
++        val obj = call("watch_sync", buildJsonObject { put("items", arr) }) ?: return false
++        return obj["data"] != null
++    }
+ }
+ 
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/WatchFeedScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/WatchFeedScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/WatchFeedScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/WatchFeedScreen.kt
+@@ -3,7 +3,4 @@ package com.hippo.ehviewer.ui.screen
+ import androidx.compose.animation.AnimatedVisibilityScope
+ import androidx.compose.foundation.clickable
+-import androidx.compose.foundation.layout.Arrangement
+-import androidx.compose.foundation.layout.Column
+-import androidx.compose.foundation.layout.Row
+ import androidx.compose.foundation.layout.fillMaxWidth
+ import androidx.compose.foundation.layout.padding
+@@ -12,5 +9,4 @@ import androidx.compose.foundation.lazy.items
+ import androidx.compose.material.icons.Icons
+ import androidx.compose.material.icons.filled.Settings
+-import androidx.compose.material3.HorizontalDivider
+ import androidx.compose.material3.Icon
+ import androidx.compose.material3.IconButton
+@@ -22,24 +18,33 @@ import androidx.compose.material3.TopAppBarDefaults
+ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.getValue
+ import androidx.compose.runtime.mutableStateListOf
++import androidx.compose.runtime.mutableStateOf
+ import androidx.compose.runtime.remember
++import androidx.compose.runtime.rememberCoroutineScope
++import androidx.compose.runtime.setValue
+ import androidx.compose.ui.Modifier
+ import androidx.compose.ui.input.nestedscroll.nestedScroll
+-import androidx.compose.ui.text.style.TextOverflow
+ import androidx.compose.ui.unit.dp
+ import com.ehviewer.core.database.model.WatchItem
++import com.ehviewer.core.model.BaseGalleryInfo
+ import com.hippo.ehviewer.EhDB
+-import com.hippo.ehviewer.client.data.ListUrlBuilder
++import com.hippo.ehviewer.client.EhUtils
++import com.hippo.ehviewer.client.ExlClient
++import com.hippo.ehviewer.client.getThumbKey
+ import com.hippo.ehviewer.ui.Screen
++import com.hippo.ehviewer.ui.doGalleryInfoAction
+ import com.hippo.ehviewer.ui.destinations.WatchListScreenDestination
++import com.hippo.ehviewer.ui.main.GalleryInfoListItem
+ import com.hippo.ehviewer.ui.main.NavigationIcon
+-import com.hippo.ehviewer.ui.screen.asDst
+ import com.ramcosta.composedestinations.annotation.Destination
+ import com.ramcosta.composedestinations.annotation.RootGraph
+ import com.ramcosta.composedestinations.navigation.DestinationsNavigator
++import kotlinx.coroutines.launch
+ 
+ /**
+- * 关注页：展示已启用的关注项（艺术家 / 社团 / 标签 / 标题 / 其他），
+- * 点一条即按对应语法打开站点搜索。管理入口在右上角。
++ * 关注页：展示**服务端按关注项定期抓取到的画廊**（不是关注项本身）。
++ * 关注项的编辑在右上角进入 WatchListScreen。
++ * 列表使用原生 GalleryInfoListItem，长按为原生操作菜单。
+  */
+ @Destination<RootGraph>
+@@ -47,15 +52,55 @@ import com.ramcosta.composedestinations.navigation.DestinationsNavigator
+ fun AnimatedVisibilityScope.WatchFeedScreen(navigator: DestinationsNavigator) = Screen(navigator) {
+     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+-    val items = remember { mutableStateListOf<WatchItem>() }
++    val scope = rememberCoroutineScope()
++    val items = remember { mutableStateListOf<BaseGalleryInfo>() }
++    var total by remember { mutableStateOf(0) }
++    var page by remember { mutableStateOf(0) }
++    var loading by remember { mutableStateOf(false) }
++    var synced by remember { mutableStateOf(false) }
+ 
+-    LaunchedEffect(Unit) {
+-        items.clear()
+-        items.addAll(EhDB.watchItemDao().listEnabled())
++    fun load(reset: Boolean) {
++        if (loading) return
++        loading = true
++        scope.launch {
++            // 首次进入：把本地关注项整份推到服务端，服务端才能据此抓取
++            if (!synced) {
++                val local = runCatching { EhDB.watchItemDao().listEnabled() }.getOrDefault(emptyList())
++                runCatching {
++                    ExlClient.watchSync(local.map { Triple(it.kind, it.content, true) })
++                }
++                synced = true
++            }
++            val p = if (reset) 0 else page
++            val (list, t) = ExlClient.watchGalleries(p)
++            if (reset) items.clear()
++            list.forEach { w ->
++                if (items.none { it.gid == w.gid }) {
++                    items.add(
++                        BaseGalleryInfo(
++                            gid = w.gid,
++                            token = w.token,
++                            title = w.title,
++                            titleJpn = w.title_jpn,
++                            thumbKey = w.thumb?.let { runCatching { getThumbKey(it) }.getOrNull() },
++                            category = EhUtils.getCategory(w.category),
++                            uploader = w.uploader,
++                            rating = w.rating,
++                            favoriteSlot = w.fav_status,
++                        ),
++                    )
++                }
++            }
++            total = t
++            page = p + 1
++            loading = false
++        }
+     }
+ 
++    LaunchedEffect(Unit) { load(true) }
++
+     Scaffold(
+         topBar = {
+             TopAppBar(
+-                title = { Text("关注 · ${items.size}") },
++                title = { Text("关注 · $total") },
+                 navigationIcon = { NavigationIcon() },
+                 actions = {
+@@ -72,50 +117,25 @@ fun AnimatedVisibilityScope.WatchFeedScreen(navigator: DestinationsNavigator) =
+             contentPadding = padding,
+         ) {
+-            items.groupBy { it.kind }.forEach { (kind, list) ->
+-                item(key = "h_$kind") {
+-                    Text(
+-                        text = kindLabel(kind) + "（${list.size}）",
+-                        style = MaterialTheme.typography.labelMedium,
+-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+-                    )
+-                }
+-                items(list, key = { "${it.kind}_${it.content}" }) { w ->
+-                    Column(
+-                        modifier = Modifier
+-                            .fillMaxWidth()
+-                            .clickable {
+-                                val builder = ListUrlBuilder().apply {
+-                                    keyword = watchKeyword(w)
+-                                }
+-                                navigator.navigate(builder.asDst())
+-                            }
+-                            .padding(horizontal = 16.dp, vertical = 10.dp),
+-                        verticalArrangement = Arrangement.spacedBy(2.dp),
+-                    ) {
+-                        Text(w.content, maxLines = 1, overflow = TextOverflow.Ellipsis)
+-                        Text(
+-                            text = watchKeyword(w) + (w.note?.let { " · $it" } ?: ""),
+-                            style = MaterialTheme.typography.bodySmall,
+-                            maxLines = 1,
+-                            overflow = TextOverflow.Ellipsis,
+-                        )
+-                    }
+-                    HorizontalDivider()
+-                }
+-            }
+-            if (items.isEmpty()) {
+-                item {
+-                    Text(
+-                        text = "还没有关注项。可在搜索结果页或标签长按菜单里添加。",
+-                        modifier = Modifier.padding(24.dp),
+-                        style = MaterialTheme.typography.bodyMedium,
+-                    )
+-                }
++            items(items, key = { it.gid }) { info ->
++                GalleryInfoListItem(
++                    onClick = { navigator.navigate(info.asDst()) },
++                    onLongClick = { scope.launch { doGalleryInfoAction(info) } },
++                    info = info,
++                    showPages = true,
++                    showProgress = true,
++                )
+             }
+-            item(key = "tip") {
++            item(key = "more") {
+                 Text(
+-                    text = "提示：把常看的作者/社团加进来，比塞满快速搜索更清爽。",
+-                    modifier = Modifier.padding(16.dp),
+-                    style = MaterialTheme.typography.labelSmall,
++                    text = if (loading) "加载中…" else if (items.size >= total) {
++                        if (items.isEmpty()) "还没有抓取到画廊。点右上角添加关注项后，服务端会在下次抓取时补上。" else "已全部加载"
++                    } else {
++                        "加载更多"
++                    },
++                    modifier = Modifier
++                        .fillMaxWidth()
++                        .clickable(enabled = !loading && items.size < total) { load(false) }
++                        .padding(16.dp),
++                    style = MaterialTheme.typography.bodyMedium,
+                 )
+             }
+@@ -129,4 +149,5 @@ internal fun kindLabel(kind: String): String = when (kind) {
+     "tag" -> "标签"
+     "title" -> "标题"
++    "group" -> "标签组"
+     else -> "其他"
+ }
+@@ -138,3 +159,2 @@ internal fun watchKeyword(item: WatchItem): String = when (item.kind) {
+     else -> item.content
+ }
+-
