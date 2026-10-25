@@ -1,0 +1,58 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/WatchFeedScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/WatchFeedScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/WatchFeedScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/WatchFeedScreen.kt
+@@ -3,4 +3,6 @@ package com.hippo.ehviewer.ui.screen
+ import androidx.compose.animation.AnimatedVisibilityScope
+ import androidx.compose.foundation.clickable
++import androidx.compose.foundation.layout.height
++import androidx.compose.foundation.layout.fillMaxSize
+ import androidx.compose.foundation.layout.fillMaxWidth
+ import androidx.compose.foundation.layout.padding
+@@ -54,4 +56,5 @@ fun AnimatedVisibilityScope.WatchFeedScreen(navigator: DestinationsNavigator) =
+     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+     val scope = rememberCoroutineScope()
++    val rowHeight by collectListThumbSizeAsState()
+     val items = remember { mutableStateListOf<BaseGalleryInfo>() }
+     var total by remember { mutableStateOf(0) }
+@@ -118,5 +121,5 @@ fun AnimatedVisibilityScope.WatchFeedScreen(navigator: DestinationsNavigator) =
+     ) { padding ->
+         LazyColumn(
+-            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
++            modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
+             contentPadding = padding,
+         ) {
+@@ -128,4 +131,5 @@ fun AnimatedVisibilityScope.WatchFeedScreen(navigator: DestinationsNavigator) =
+                     showPages = true,
+                     showProgress = true,
++                    modifier = Modifier.height(rowHeight),
+                 )
+             }
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
+@@ -8,4 +8,6 @@ import androidx.compose.foundation.layout.Arrangement
+ import androidx.compose.foundation.layout.Column
+ import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.height
++import androidx.compose.foundation.layout.fillMaxSize
+ import androidx.compose.foundation.layout.fillMaxWidth
+ import androidx.compose.foundation.layout.padding
+@@ -71,4 +73,5 @@ fun AnimatedVisibilityScope.DownloadPriorityScreen(navigator: DestinationsNaviga
+     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+     val scope = rememberCoroutineScope()
++    val rowHeight by collectListThumbSizeAsState()
+     val items = remember { mutableStateListOf<ExlClient.PriorityItem>() }
+     var page by remember { mutableStateOf(0) }
+@@ -127,5 +130,5 @@ fun AnimatedVisibilityScope.DownloadPriorityScreen(navigator: DestinationsNaviga
+     ) { padding ->
+         LazyColumn(
+-            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
++            modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
+             contentPadding = padding,
+         ) {
+@@ -171,4 +174,5 @@ fun AnimatedVisibilityScope.DownloadPriorityScreen(navigator: DestinationsNaviga
+                     showPages = false,
+                     showProgress = true,
++                    modifier = Modifier.height(rowHeight),
+                 )
+             }
