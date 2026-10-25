@@ -1,0 +1,10 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
+@@ -152,5 +152,5 @@ fun AnimatedVisibilityScope.DownloadPriorityScreen(navigator: DestinationsNaviga
+                 LocalQuery.matches(query, it.title, it.title_jpn, it.uploader, it.category)
+             }
+-            items(shown, key = { it.gid }) { item ->
++            items(shown) { item ->
+                 val gi = remember(item.gid) {
+                     BaseGalleryInfo(
