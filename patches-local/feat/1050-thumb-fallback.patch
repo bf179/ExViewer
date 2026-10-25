@@ -1,0 +1,32 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
+@@ -156,5 +156,5 @@ fun AnimatedVisibilityScope.DownloadPriorityScreen(navigator: DestinationsNaviga
+                         title = item.title,
+                         titleJpn = item.title_jpn,
+-                        thumbKey = item.thumb?.let { runCatching { getThumbKey(it) }.getOrNull() },
++                        thumbKey = item.thumb?.let { runCatching { getThumbKey(it) }.getOrNull() } ?: BLANK_THUMB,
+                         category = EhUtils.getCategory(item.category),
+                         uploader = item.uploader,
+@@ -192,2 +192,5 @@ private fun unescapeHtml(s: String): String =
+     runCatching { android.text.Html.fromHtml(s, android.text.Html.FROM_HTML_MODE_LEGACY).toString() }
+         .getOrDefault(s)
++/** 原生列表项对 thumbKey 做了非空断言；服务端可能没有缩略图，这里给 1x1 透明图兜底 */
++private const val BLANK_THUMB =
++    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/WatchFeedScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/WatchFeedScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/WatchFeedScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/WatchFeedScreen.kt
+@@ -82,5 +82,5 @@ fun AnimatedVisibilityScope.WatchFeedScreen(navigator: DestinationsNavigator) =
+                             title = w.title,
+                             titleJpn = w.title_jpn,
+-                            thumbKey = w.thumb?.let { runCatching { getThumbKey(it) }.getOrNull() },
++                            thumbKey = w.thumb?.let { runCatching { getThumbKey(it) }.getOrNull() } ?: BLANK_THUMB,
+                             category = EhUtils.getCategory(w.category),
+                             uploader = w.uploader,
+@@ -159,2 +159,5 @@ internal fun watchKeyword(item: WatchItem): String = when (item.kind) {
+     else -> item.content
+ }
++/** 原生列表项对 thumbKey 做了非空断言；服务端可能没有缩略图，这里给 1x1 透明图兜底 */
++private const val BLANK_THUMB =
++    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
