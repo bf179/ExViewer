@@ -1,0 +1,20 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/WatchFeedScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/WatchFeedScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/WatchFeedScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/WatchFeedScreen.kt
+@@ -85,4 +85,6 @@ fun AnimatedVisibilityScope.WatchFeedScreen(navigator: DestinationsNavigator) =
+                             thumbKey = w.thumb?.let { runCatching { getThumbKey(it) }.getOrNull() } ?: BLANK_THUMB,
+                             category = EhUtils.getCategory(w.category),
++                            thumbWidth = 250,
++                            thumbHeight = 350,
+                             uploader = w.uploader,
+                             rating = w.rating,
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
+@@ -158,4 +158,6 @@ fun AnimatedVisibilityScope.DownloadPriorityScreen(navigator: DestinationsNaviga
+                         thumbKey = item.thumb?.let { runCatching { getThumbKey(it) }.getOrNull() } ?: BLANK_THUMB,
+                         category = EhUtils.getCategory(item.category),
++                        thumbWidth = 250,
++                        thumbHeight = 350,
+                         uploader = item.uploader,
+                         rating = item.rating,
