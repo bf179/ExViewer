@@ -1,0 +1,53 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
+@@ -543,13 +543,27 @@ fun AnimatedVisibilityScope.GalleryListScreen(
+             IconButton(
+                 onClick = {
+-                    if (BatchFavController.job?.isActive == true) {
+-                        cancelBatchFav()
+-                    } else {
+-                        startBatchFav(data.itemSnapshotList.items.toList())
++                    launch {
++                        val raw = urlBuilder.keyword.orEmpty().trim()
++                        if (raw.isBlank()) {
++                            snackbar("当前没有搜索词")
++                        } else {
++                            val input = awaitInputText(initial = raw, title = "关注此项", hint = "标签 / uploader:xxx / 标题")
++                            if (input != null && input.trim().isNotEmpty()) {
++                                val kind = watchKindOf(input)
++                                val content = watchContentOf(input, kind)
++                                awaitConfirmationOrCancel {
++                                    Text("关注「$content」作为${watchKindLabel(kind)}?")
++                                }
++                                EhDB.watchItemDao().insert(
++                                    WatchItem(kind = kind, content = content, createdAt = System.currentTimeMillis()),
++                                )
++                                snackbar("已加入关注")
++                            }
++                        }
+                     }
+                 },
+                 shapes = IconButtonDefaults.shapes(),
+             ) {
+-                Icon(imageVector = Icons.Default.PlaylistAdd, contentDescription = "批量收藏")
++                Icon(imageVector = Icons.Default.Star, contentDescription = "添加关注标签")
+             }
+             AvatarIcon()
+@@ -706,6 +720,14 @@ fun AnimatedVisibilityScope.GalleryListScreen(
+             }
+         }
+-        // 关注当前搜索词（类型自动识别，可确认）
+-        onClick(Icons.Default.Star) {
++        // 批量收藏当前页（入口从工具栏移入 FAB）
++        onClick(Icons.Default.PlaylistAdd) {
++            if (BatchFavController.job?.isActive == true) {
++                cancelBatchFav()
++            } else {
++                startBatchFav(data.itemSnapshotList.items.toList())
++            }
++        }
++        // 关注当前搜索词（已移到搜索框右侧，这里保留以防误删）
++        if (false) onClick(Icons.Default.Star) {
+             launch {
+                 val raw = urlBuilder.keyword.orEmpty().trim()
