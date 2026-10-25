@@ -1,0 +1,15 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/WatchFeedScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/WatchFeedScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/WatchFeedScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/WatchFeedScreen.kt
+@@ -28,4 +28,5 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
+ import androidx.compose.ui.unit.dp
+ import com.ehviewer.core.database.model.WatchItem
++import com.ehviewer.core.util.logcat
+ import com.ehviewer.core.model.BaseGalleryInfo
+ import com.hippo.ehviewer.EhDB
+@@ -91,4 +92,5 @@ fun AnimatedVisibilityScope.WatchFeedScreen(navigator: DestinationsNavigator) =
+                 }
+             }
++            logcat("ExlWatch") { "got=${list.size} total=$t first=${list.firstOrNull()?.title} gid=${list.firstOrNull()?.gid}" }
+             total = t
+             page = p + 1
