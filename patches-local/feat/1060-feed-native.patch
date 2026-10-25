@@ -1,0 +1,70 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/FeedSubScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/FeedSubScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/FeedSubScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/FeedSubScreen.kt
+@@ -46,5 +46,8 @@ import androidx.compose.ui.unit.dp
+ import com.hippo.ehviewer.client.ExlClient
+ import com.hippo.ehviewer.client.LocalQuery
++import com.ehviewer.core.model.BaseGalleryInfo
+ import com.hippo.ehviewer.client.SeriesKeyword
++import androidx.compose.foundation.layout.height
++import com.hippo.ehviewer.client.EhUtils
+ import com.hippo.ehviewer.ui.Screen
+ import com.hippo.ehviewer.ui.main.NavigationIcon
+@@ -117,4 +120,5 @@ fun AnimatedVisibilityScope.FeedSubScreen(navigator: DestinationsNavigator) = Sc
+         },
+     ) { padding ->
++        val rowHeight by collectListThumbSizeAsState()
+         LazyColumn(
+             modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+@@ -181,4 +185,18 @@ fun AnimatedVisibilityScope.FeedSubScreen(navigator: DestinationsNavigator) = Sc
+             }
+             items(shownItems, key = { "f_${it.gid}" }) { item ->
++                val info = remember(item.gid) {
++                    BaseGalleryInfo(
++                        gid = item.displayGid.takeIf { it > 0 } ?: item.gid,
++                        token = item.displayToken.ifBlank { item.token },
++                        title = item.title,
++                        titleJpn = item.title_jpn,
++                        thumbKey = item.thumb?.takeIf { it.startsWith("https://") } ?: BLANK_THUMB,
++                        category = EhUtils.getCategory(item.category),
++                        thumbWidth = 250,
++                        thumbHeight = 350,
++                        uploader = item.uploader,
++                        rating = item.rating,
++                    )
++                }
+                 Column(
+                     modifier = Modifier
+@@ -194,20 +212,11 @@ fun AnimatedVisibilityScope.FeedSubScreen(navigator: DestinationsNavigator) = Sc
+                                 }
+                             },
+-                        )
+-                        .padding(horizontal = 16.dp, vertical = 8.dp),
+-                    verticalArrangement = Arrangement.spacedBy(2.dp),
++                        ),
+                 ) {
+-                    Text(
+-                        text = item.title ?: item.title_jpn ?: "#${item.gid}",
+-                        maxLines = 2,
+-                        overflow = TextOverflow.Ellipsis,
+-                        style = MaterialTheme.typography.bodyMedium,
+-                    )
+-                    Text(
+-                        text = listOfNotNull(item.uploader?.takeIf { it.isNotBlank() }, item.category, "${item.filecount}P")
+-                            .joinToString(" · "),
+-                        style = MaterialTheme.typography.bodySmall,
+-                        maxLines = 1,
+-                        overflow = TextOverflow.Ellipsis,
++                    GalleryInfoListItem(
++                        info = info,
++                        showPages = true,
++                        showProgress = true,
++                        modifier = Modifier.height(rowHeight),
+                     )
+                     if (item.replaced == 1 || item.expunged == 1) {
+@@ -219,4 +228,5 @@ fun AnimatedVisibilityScope.FeedSubScreen(navigator: DestinationsNavigator) = Sc
+                             style = MaterialTheme.typography.labelSmall,
+                             color = MaterialTheme.colorScheme.primary,
++                            modifier = Modifier.padding(start = 16.dp, bottom = 2.dp),
+                         )
+                     }

@@ -1,0 +1,23 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt
+@@ -32,4 +32,5 @@ import androidx.compose.foundation.shape.RoundedCornerShape
+ import androidx.compose.material.icons.Icons
+ import androidx.compose.material.icons.filled.FolderZip
++import androidx.compose.material.icons.filled.QueueMusic
+ import androidx.compose.material.icons.filled.Search
+ import androidx.compose.material3.Checkbox
+@@ -651,4 +652,13 @@ fun BelowHeader(galleryDetail: GalleryDetail, voteTag: VoteTag) {
+             }
+         }
++        EhIconButton(
++            icon = Icons.Default.QueueMusic,
++            text = "加入优先队列",
++            onClick = {
++                runCatching { ExlClient.pqAdd("${galleryDetail.gid}_${galleryDetail.token}", "gallery") }
++                    .onSuccess { snackbar("已加入下载优先队列") }
++                    .onFailure { snackbar("加入失败：${it.message}") }
++            },
++        )
+         EhIconButton(
+             icon = Icons.Default.Search,
