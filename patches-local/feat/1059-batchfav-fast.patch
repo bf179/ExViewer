@@ -1,0 +1,20 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt
+@@ -624,5 +624,6 @@ fun clearFinishedBatchTasks() {
+ private suspend fun runBatchFavLoop(items: List<BaseGalleryInfo>, taskId: Long, total: Int, createdAt: Long) {
+     val dao = EhDB.batchFavTaskDao()
+-    val slowFav = Settings.defaultFavSlot.value != -1
++    // 只有站点云端槽位(0..9)需要限流；本地收藏(-1/-2/11)直接批量写库
++    val slowFav = Settings.defaultFavSlot.value in 0..9
+     var successCount = 0
+     // 取消后 Room suspend 写入会立刻抛 CancellationException，用 NonCancellable 保证进度落盘
+@@ -646,6 +647,6 @@ private suspend fun runBatchFavLoop(items: List<BaseGalleryInfo>, taskId: Long,
+             if (!isFavorited) {
+                 runSuspendCatching { batchModifyFavorite(galleryInfo) }.onSuccess { successCount++ }
+-                if (slowFav) delay(4000)
+-                delay(100)
++                if (slowFav) delay(1200) else delay(16)
++
+             } else {
+                 successCount++
