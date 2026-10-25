@@ -1,0 +1,39 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/WatchFeedScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/WatchFeedScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/WatchFeedScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/WatchFeedScreen.kt
+@@ -30,5 +30,4 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
+ import androidx.compose.ui.unit.dp
+ import com.ehviewer.core.database.model.WatchItem
+-import com.ehviewer.core.util.logcat
+ import com.ehviewer.core.model.BaseGalleryInfo
+ import com.hippo.ehviewer.EhDB
+@@ -86,5 +85,5 @@ fun AnimatedVisibilityScope.WatchFeedScreen(navigator: DestinationsNavigator) =
+                             title = w.title,
+                             titleJpn = w.title_jpn,
+-                            thumbKey = w.thumb?.let { runCatching { getThumbKey(it) }.getOrNull() } ?: BLANK_THUMB,
++                            thumbKey = w.thumb?.takeIf { it.startsWith("https://") } ?: BLANK_THUMB,
+                             category = EhUtils.getCategory(w.category),
+                             thumbWidth = 250,
+@@ -97,5 +96,4 @@ fun AnimatedVisibilityScope.WatchFeedScreen(navigator: DestinationsNavigator) =
+                 }
+             }
+-            logcat("ExlWatch") { "got=${list.size} total=$t added=${items.size} first=${list.firstOrNull()?.title}" }
+             total = t
+             page = p + 1
+@@ -109,5 +107,5 @@ fun AnimatedVisibilityScope.WatchFeedScreen(navigator: DestinationsNavigator) =
+         topBar = {
+             TopAppBar(
+-                title = { Text("关注 · $total / ${items.size}") },
++                title = { Text("关注 · $total") },
+                 navigationIcon = { NavigationIcon() },
+                 actions = {
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/DownloadPriorityScreen.kt
+@@ -159,5 +159,5 @@ fun AnimatedVisibilityScope.DownloadPriorityScreen(navigator: DestinationsNaviga
+                         title = item.title,
+                         titleJpn = item.title_jpn,
+-                        thumbKey = item.thumb?.let { runCatching { getThumbKey(it) }.getOrNull() } ?: BLANK_THUMB,
++                        thumbKey = item.thumb?.takeIf { it.startsWith("https://") } ?: BLANK_THUMB,
+                         category = EhUtils.getCategory(item.category),
+                         thumbWidth = 250,
