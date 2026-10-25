@@ -1,0 +1,14 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/ExlClient.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/ExlClient.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/client/ExlClient.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/ExlClient.kt
+@@ -236,7 +236,7 @@ object ExlClient {
+             put("order", order)
+         })?.data() ?: return emptyList<WatchGalleryItem>() to 0
+-        val items = runCatching {
+-            obj["items"]!!.jsonArray.map { json.decodeFromJsonElement(WatchGalleryItem.serializer(), it) }
+-        }.getOrDefault(emptyList())
++        // 逐条解析：单条字段异常不应该让整页变空（之前 replaced 类型不匹配就踩过这个坑）
++        val items = runCatching { obj["items"]!!.jsonArray }.getOrDefault(emptyList())
++            .mapNotNull { el -> runCatching { json.decodeFromJsonElement(WatchGalleryItem.serializer(), el) }.getOrNull() }
+         val total = runCatching { obj["total"]!!.jsonPrimitive.intOrNull ?: items.size }.getOrDefault(items.size)
+         return items to total
