@@ -1,0 +1,37 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/EhScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/EhScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/EhScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/EhScreen.kt
+@@ -41,5 +41,4 @@ import com.hippo.ehviewer.ui.Screen
+ import com.hippo.ehviewer.ui.destinations.ExlSettingsScreenDestination
+ import com.hippo.ehviewer.ui.destinations.FilterScreenDestination
+-import com.hippo.ehviewer.ui.destinations.QuickSearchManagerScreenDestination
+ import com.hippo.ehviewer.ui.destinations.SyncHideScreenDestination
+ import com.hippo.ehviewer.ui.destinations.MyTagsScreenDestination
+@@ -253,8 +252,4 @@ fun AnimatedVisibilityScope.EhScreen(navigator: DestinationsNavigator) = Screen(
+                 )
+             }
+-            Preference(
+-                title = "快速搜索管理",
+-                summary = "搜索定位 / 智能排序 / 置顶 / 智能分类 / 删除",
+-            ) { navigate(QuickSearchManagerScreenDestination) }
+             Preference(
+                 title = stringResource(id = R.string.settings_eh_filter),
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt
+@@ -118,4 +118,5 @@ import com.hippo.ehviewer.client.PqApiRequest
+ import com.hippo.ehviewer.client.sendPqApiRequest
+ import com.hippo.ehviewer.client.watchContentOf
++import com.hippo.ehviewer.client.ExlClient
+ import com.hippo.ehviewer.client.watchKindOf
+ import com.hippo.ehviewer.client.DEFAULT_USER
+@@ -783,4 +784,9 @@ fun BelowHeader(galleryDetail: GalleryDetail, voteTag: VoteTag) {
+                             snackbar(filterAdded)
+                         }
++                        onSelect("加入优先下载队列") {
++                            runCatching { ExlClient.pqAdd(tag, "tag") }
++                                .onSuccess { snackbar("已加入优先队列：$tag") }
++                                .onFailure { snackbar("加入失败：${it.message}") }
++                        }
+                         onSelect("关注此标签") {
+                             val kind = watchKindOf(tag)
