@@ -1,0 +1,13 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
+@@ -106,4 +106,9 @@ fun AnimatedVisibilityScope.ExlSettingsScreen(navigator: DestinationsNavigator)
+                 state = Settings.syncFav.asMutableState(),
+             )
++            SwitchPreference(
++                title = "快捷收藏",
++                summary = "长按画廊直接收藏到默认收藏夹，不弹菜单（云端槽位自动限流）",
++                state = Settings.quickFav.asMutableState(),
++            )
+ 
+             SectionTitle("屏蔽与过滤")
