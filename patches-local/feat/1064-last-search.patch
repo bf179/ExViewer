@@ -1,0 +1,120 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ExlPrefs.kt b/app/src/main/kotlin/com/hippo/ehviewer/ExlPrefs.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ExlPrefs.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ExlPrefs.kt
+@@ -23,4 +23,6 @@ object ExlPrefs : DataStorePreferences("exl_prefs") {
+     val disableFilter = boolPref("disable_filter", false)
+     val debugFilter = boolPref("debug_filter", false)
++    // ===== 快速搜索状态快照（旧版 Save / Restore）=====
++    val lastSearchJson = stringPref("last_search_json", "")
+ 
+     val hidePqInHistory = boolPref("hide_pq_in_history", false)
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
+@@ -692,4 +692,32 @@ fun AnimatedVisibilityScope.GalleryListScreen(
+             }
+         }
++        // 保存当前搜索状态（旧版 Save）：记录条件 + 首条 gid，便于恢复后接着翻
++        onClick(Icons.Default.Flag) {
++            launch {
++                awaitConfirmationOrCancel { Text("存储当前搜索状态?") }
++                val anchorGid = data.itemSnapshotList.items.firstOrNull()?.gid ?: 0L
++                runCatching { LastSearch.save(urlBuilder, anchorGid) }
++                    .onSuccess { snackbar("已保存当前搜索状态") }
++                    .onFailure { snackbar("保存失败：${it.message}") }
++            }
++        }
++        // 恢复上次保存的搜索状态（旧版 Restore）
++        onClick(Icons.Default.Restore) {
++            launch {
++                if (!LastSearch.hasSaved()) {
++                    snackbar("还没有保存过搜索状态")
++                } else {
++                    awaitConfirmationOrCancel { Text("恢复快速搜索状态?") }
++                    val builder = LastSearch.restore()
++                    if (builder == null) {
++                        snackbar("恢复失败：快照损坏")
++                    } else {
++                        urlBuilder = builder
++                        data.refresh()
++                        snackbar("已恢复上次保存的搜索")
++                    }
++                }
++            }
++        }
+         // 快捷附加关键词（旧版 add_keyword）：把预设关键词拼到当前搜索词后
+         onClick(Icons.Default.FilterAlt) {
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/LastSearch.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/LastSearch.kt
+new file mode 100644
+--- /dev/null
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/LastSearch.kt
+@@ -0,0 +1,69 @@
++package com.hippo.ehviewer.client
++
++import com.ehviewer.core.database.model.QuickSearch
++import com.hippo.ehviewer.ExlPrefs
++import com.hippo.ehviewer.client.data.ListUrlBuilder
++import kotlinx.serialization.Serializable
++import kotlinx.serialization.json.Json
++
++/**
++ * 快速搜索状态保存 / 恢复（旧版 GalleryListScreen 的 Save / Restore 按钮）。
++ *
++ * 保存：当前搜索条件 + 当前首条画廊 gid（恢复后从该位置继续翻）。
++ * 恢复：重建 ListUrlBuilder 并刷新列表。
++ *
++ * 刻意不写 QUICK_SEARCH 表，避免污染用户的快捷搜索列表；改用 DataStore 单条 JSON。
++ */
++@Serializable
++private data class SearchSnapshot(
++    val mode: Int = 0,
++    val category: Int = 0,
++    val keyword: String? = null,
++    val advanceSearch: Int = 0,
++    val minRating: Int = 0,
++    val pageFrom: Int = 0,
++    val pageTo: Int = 0,
++    val anchorGid: Long = 0,
++)
++
++object LastSearch {
++    private const val NAME = "lastSearch"
++
++    private val json = Json {
++        ignoreUnknownKeys = true
++        encodeDefaults = true
++    }
++
++    suspend fun save(builder: ListUrlBuilder, anchorGid: Long) {
++        val snap = SearchSnapshot(
++            mode = builder.mode,
++            category = builder.category,
++            keyword = builder.keyword,
++            advanceSearch = builder.advanceSearch,
++            minRating = builder.minRating,
++            pageFrom = builder.pageFrom,
++            pageTo = builder.pageTo,
++            anchorGid = anchorGid,
++        )
++        ExlPrefs.lastSearchJson.value = json.encodeToString(SearchSnapshot.serializer(), snap)
++    }
++
++    suspend fun restore(): ListUrlBuilder? {
++        val raw = ExlPrefs.lastSearchJson.value
++        if (raw.isBlank()) return null
++        val snap = runCatching { json.decodeFromString(SearchSnapshot.serializer(), raw) }.getOrNull() ?: return null
++        val qs = QuickSearch(
++            name = "$NAME@${snap.anchorGid}",
++            mode = snap.mode,
++            category = snap.category,
++            keyword = snap.keyword,
++            advanceSearch = snap.advanceSearch,
++            minRating = snap.minRating,
++            pageFrom = snap.pageFrom,
++            pageTo = snap.pageTo,
++        )
++        return ListUrlBuilder(qs)
++    }
++
++    suspend fun hasSaved(): Boolean = ExlPrefs.lastSearchJson.value.isNotBlank()
++}
