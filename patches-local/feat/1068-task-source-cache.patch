@@ -1,0 +1,281 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ExlPrefs.kt b/app/src/main/kotlin/com/hippo/ehviewer/ExlPrefs.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ExlPrefs.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ExlPrefs.kt
+@@ -25,4 +25,6 @@ object ExlPrefs : DataStorePreferences("exl_prefs") {
+     // ===== 快速搜索状态快照（旧版 Save / Restore）=====
+     val lastSearchJson = stringPref("last_search_json", "")
++    // ===== 批量任务来源快照（任务中心显示 + 点击回跳）=====
++    val taskSources = stringPref("task_sources", "")
+ 
+     val hidePqInHistory = boolPref("hide_pq_in_history", false)
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/CommonOperations.kt
+@@ -536,5 +536,5 @@ suspend fun batchModifyFavorite(galleryInfo: BaseGalleryInfo) {
+ }
+ 
+-fun startBatchFav(items: List<BaseGalleryInfo>) {
++fun startBatchFav(items: List<BaseGalleryInfo>, source: com.hippo.ehviewer.client.TaskSource? = null) {
+     val now = System.currentTimeMillis()
+     batchFavScope.launch {
+@@ -544,4 +544,5 @@ fun startBatchFav(items: List<BaseGalleryInfo>) {
+                 BatchFavTask(status = BATCH_STATUS_QUEUED, total = items.size, done = 0, createdAt = now, updatedAt = now),
+             )
++            if (source != null) runCatching { com.hippo.ehviewer.client.TaskSources.save(id, source) }
+             BatchFavController.enqueue(id, items)
+             batchToast("已加入队列（当前有任务在跑）")
+@@ -550,4 +551,5 @@ fun startBatchFav(items: List<BaseGalleryInfo>) {
+                 BatchFavTask(status = BATCH_STATUS_RUNNING, total = items.size, done = 0, createdAt = now, updatedAt = now),
+             )
++            if (source != null) runCatching { com.hippo.ehviewer.client.TaskSources.save(id, source) }
+             launchBatch(id, items, items.size, now)
+         }
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
+@@ -756,5 +756,18 @@ fun AnimatedVisibilityScope.GalleryListScreen(
+                 cancelBatchFav()
+             } else {
+-                startBatchFav(data.itemSnapshotList.items.toList())
++                startBatchFav(
++                    data.itemSnapshotList.items.toList(),
++                    com.hippo.ehviewer.client.TaskSource(
++                        label = buildString {
++                            val kw = urlBuilder.keyword.orEmpty().trim()
++                            append(if (kw.isEmpty()) "列表" else "搜索：$kw")
++                        },
++                        mode = urlBuilder.mode,
++                        category = urlBuilder.category,
++                        keyword = urlBuilder.keyword,
++                        advanceSearch = urlBuilder.advanceSearch,
++                        minRating = urlBuilder.minRating,
++                    ),
++                )
+             }
+         }
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/TasksScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/TasksScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/TasksScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/TasksScreen.kt
+@@ -36,4 +36,6 @@ import com.hippo.ehviewer.ui.BATCH_STATUS_QUEUED
+ import com.hippo.ehviewer.ui.BATCH_STATUS_RUNNING
+ import com.hippo.ehviewer.ui.Screen
++import com.hippo.ehviewer.ui.screen.asDst
++import androidx.compose.foundation.clickable
+ import com.hippo.ehviewer.ui.cancelBatchTask
+ import com.hippo.ehviewer.ui.clearFinishedBatchTasks
+@@ -90,5 +92,25 @@ fun AnimatedVisibilityScope.TasksScreen(navigator: DestinationsNavigator) = Scre
+             }
+             items(tasks, key = { it.id }) { task ->
+-                TaskRow(task = task, timeText = timeFormat.format(Date(task.createdAt)))
++                val src = com.hippo.ehviewer.client.TaskSources.load(task.id)
++                TaskRow(
++                    task = task,
++                    timeText = timeFormat.format(Date(task.createdAt)),
++                    sourceLabel = src?.label,
++                    onClick = src?.let { s ->
++                        {
++                            val qs = com.ehviewer.core.database.model.QuickSearch(
++                                name = "task@${task.id}",
++                                mode = s.mode,
++                                category = s.category,
++                                keyword = s.keyword,
++                                advanceSearch = s.advanceSearch,
++                                minRating = s.minRating,
++                            )
++                            navigator.navigate(
++                                com.hippo.ehviewer.client.data.ListUrlBuilder(qs).asDst(),
++                            )
++                        }
++                    },
++                )
+             }
+         }
+@@ -97,5 +119,5 @@ fun AnimatedVisibilityScope.TasksScreen(navigator: DestinationsNavigator) = Scre
+ 
+ @Composable
+-private fun TaskRow(task: BatchFavTask, timeText: String) {
++private fun TaskRow(task: BatchFavTask, timeText: String, sourceLabel: String? = null, onClick: (() -> Unit)? = null) {
+     val active = task.status == BATCH_STATUS_RUNNING || task.status == BATCH_STATUS_QUEUED
+     ListItem(
+@@ -104,4 +126,10 @@ private fun TaskRow(task: BatchFavTask, timeText: String) {
+             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                 Text(text = "进度 ${task.done}/${task.total} · $timeText")
++                if (!sourceLabel.isNullOrBlank()) {
++                    Text(
++                        text = "来源：$sourceLabel" + if (onClick != null) "（点击回到该页面）" else "",
++                        style = MaterialTheme.typography.bodySmall,
++                    )
++                }
+                 if (task.status == BATCH_STATUS_CANCELLED || task.status == BATCH_STATUS_FAILED) {
+                     Text(
+@@ -121,5 +149,5 @@ private fun TaskRow(task: BatchFavTask, timeText: String) {
+             }
+         },
+-        modifier = Modifier.fillMaxWidth(),
++        modifier = Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
+     )
+ }
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/ExlClient.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/ExlClient.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/client/ExlClient.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/ExlClient.kt
+@@ -97,5 +97,7 @@ object ExlClient {
+     )
+ 
+-    suspend fun pqList(page: Int, pageSize: Int = 30, sort: String = "added", desc: Boolean = true, hideFav: Boolean): Pair<List<PriorityItem>, Int> {
++    suspend fun pqList(page: Int, pageSize: Int = 30, sort: String = "added", desc: Boolean = true, hideFav: Boolean, force: Boolean = false): Pair<List<PriorityItem>, Int> {
++        val cacheKey = "pq:$page:$pageSize:$sort:$desc:$hideFav"
++        if (!force) ExlListCache.get<Pair<List<PriorityItem>, Int>>(cacheKey)?.let { return it }
+         val obj = call("pq_list", buildJsonObject {
+             put("page", page)
+@@ -109,5 +111,5 @@ object ExlClient {
+         }.getOrDefault(emptyList())
+         val total = runCatching { obj["total"]!!.jsonPrimitive.intOrNull ?: items.size }.getOrDefault(items.size)
+-        return items to total
++        return (items to total).also { ExlListCache.put(cacheKey, it) }
+     }
+ 
+@@ -144,5 +146,7 @@ object ExlClient {
+     )
+ 
+-    suspend fun feedList(page: Int, pageSize: Int = 30, subId: Int? = null, hideFav: Boolean): List<FeedItem> {
++    suspend fun feedList(page: Int, pageSize: Int = 30, subId: Int? = null, hideFav: Boolean, force: Boolean = false): List<FeedItem> {
++        val cacheKey = "feed:$page:$pageSize:$subId:$hideFav"
++        if (!force) ExlListCache.get<List<FeedItem>>(cacheKey)?.let { return it }
+         val obj = call("feed_list", buildJsonObject {
+             put("page", page)
+@@ -154,5 +158,5 @@ object ExlClient {
+         return runCatching {
+             obj["items"]!!.jsonArray.map { json.decodeFromJsonElement(FeedItem.serializer(), it) }
+-        }.getOrDefault(emptyList())
++        }.getOrDefault(emptyList()).also { ExlListCache.put(cacheKey, it) }
+     }
+ 
+@@ -230,5 +234,7 @@ object ExlClient {
+     )
+ 
+-    suspend fun watchGalleries(page: Int, pageSize: Int = 30, order: String = "new"): Pair<List<WatchGalleryItem>, Int> {
++    suspend fun watchGalleries(page: Int, pageSize: Int = 30, order: String = "new", force: Boolean = false): Pair<List<WatchGalleryItem>, Int> {
++        val cacheKey = "watch:$page:$pageSize:$order"
++        if (!force) ExlListCache.get<Pair<List<WatchGalleryItem>, Int>>(cacheKey)?.let { return it }
+         val obj = call("watch_galleries", buildJsonObject {
+             put("page", page)
+@@ -240,5 +246,5 @@ object ExlClient {
+             .mapNotNull { el -> runCatching { json.decodeFromJsonElement(WatchGalleryItem.serializer(), el) }.getOrNull() }
+         val total = runCatching { obj["total"]!!.jsonPrimitive.intOrNull ?: items.size }.getOrDefault(items.size)
+-        return items to total
++        return (items to total).also { ExlListCache.put(cacheKey, it) }
+     }
+ 
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/TaskSource.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/TaskSource.kt
+new file mode 100644
+--- /dev/null
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/TaskSource.kt
+@@ -0,0 +1,60 @@
++package com.hippo.ehviewer.client
++
++import com.hippo.ehviewer.ExlPrefs
++import kotlinx.serialization.Serializable
++import kotlinx.serialization.builtins.MapSerializer
++import kotlinx.serialization.builtins.serializer
++import kotlinx.serialization.json.Json
++
++/**
++ * 批量任务来源快照：记录任务发起时所在的页面（搜索词 / 模式 / 分类），
++ * 让「任务中心」能显示来源并一键回到那个列表页。
++ *
++ * 刻意不写 Room：batch_fav_tasks 表结构保持不动，避免 DB 版本迁移；
++ * 快照按任务 id 存在 DataStore 的一个 JSON map 里，最多保留 50 条。
++ */
++@Serializable
++data class TaskSource(
++    val label: String = "",
++    val mode: Int = 0,
++    val category: Int = 0,
++    val keyword: String? = null,
++    val advanceSearch: Int = 0,
++    val minRating: Int = 0,
++)
++
++object TaskSources {
++    private val json = Json {
++        ignoreUnknownKeys = true
++        encodeDefaults = true
++    }
++
++    private val mapSerializer = MapSerializer(String.serializer(), TaskSource.serializer())
++
++    private fun parse(): MutableMap<String, TaskSource> {
++        val raw = ExlPrefs.taskSources.value
++        if (raw.isBlank()) return mutableMapOf()
++        return runCatching { json.decodeFromString(mapSerializer, raw).toMutableMap() }
++            .getOrElse { mutableMapOf() }
++    }
++
++    private suspend fun write(map: Map<String, TaskSource>) {
++        ExlPrefs.taskSources.value = json.encodeToString(mapSerializer, map)
++    }
++
++    suspend fun save(taskId: Long, source: TaskSource) {
++        val map = parse()
++        map[taskId.toString()] = source
++        if (map.size > 50) {
++            map.keys.take(map.size - 50).forEach { map.remove(it) }
++        }
++        write(map)
++    }
++
++    fun load(taskId: Long): TaskSource? = parse()[taskId.toString()]
++
++    suspend fun forget(taskId: Long) {
++        val map = parse()
++        if (map.remove(taskId.toString()) != null) write(map)
++    }
++}
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/ExlListCache.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/ExlListCache.kt
+new file mode 100644
+--- /dev/null
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/ExlListCache.kt
+@@ -0,0 +1,43 @@
++package com.hippo.ehviewer.client
++
++/**
++ * 远端列表页的短期缓存：同一 (action, 分页参数) 在 TTL 内直接返回上次结果。
++ *
++ * 解决「进画廊再返回 → 列表白屏重载」：返回时首帧就能拿到数据渲染，
++ * 后台再刷新（调用方传 force=true）。
++ *
++ * 只在内存里，进程结束即失效；不做磁盘持久化，避免和服务端数据不一致。
++ */
++object ExlListCache {
++    private const val DEFAULT_TTL_MS = 10 * 60 * 1000L
++
++    private data class Entry(val at: Long, val payload: Any)
++
++    private val map = LinkedHashMap<String, Entry>(32, 0.75f, true)
++
++    @Synchronized
++    fun put(key: String, payload: Any) {
++        map[key] = Entry(System.currentTimeMillis(), payload)
++        if (map.size > 60) {
++            val it = map.entries.iterator()
++            if (it.hasNext()) {
++                it.next()
++                it.remove()
++            }
++        }
++    }
++
++    @Suppress("UNCHECKED_CAST")
++    @Synchronized
++    fun <T> get(key: String, ttlMs: Long = DEFAULT_TTL_MS): T? {
++        val e = map[key] ?: return null
++        if (System.currentTimeMillis() - e.at > ttlMs) {
++            map.remove(key)
++            return null
++        }
++        return e.payload as? T
++    }
++
++    @Synchronized
++    fun clear() = map.clear()
++}
