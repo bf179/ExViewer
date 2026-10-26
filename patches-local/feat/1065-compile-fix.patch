@@ -1,0 +1,46 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/FeedSubScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/FeedSubScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/FeedSubScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/FeedSubScreen.kt
+@@ -48,4 +48,5 @@ import com.hippo.ehviewer.client.LocalQuery
+ import com.ehviewer.core.model.BaseGalleryInfo
+ import com.hippo.ehviewer.client.SeriesKeyword
++import com.hippo.ehviewer.ui.main.GalleryInfoListItem
+ import androidx.compose.foundation.layout.height
+ import com.hippo.ehviewer.client.EhUtils
+@@ -277,2 +278,3 @@ fun AnimatedVisibilityScope.FeedSubScreen(navigator: DestinationsNavigator) = Sc
+ }
+ 
++private const val BLANK_THUMB = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
+@@ -693,5 +693,5 @@ fun AnimatedVisibilityScope.GalleryListScreen(
+         }
+         // 保存当前搜索状态（旧版 Save）：记录条件 + 首条 gid，便于恢复后接着翻
+-        onClick(Icons.Default.Flag) {
++        onClick(Icons.Default.Bookmark) {
+             launch {
+                 awaitConfirmationOrCancel { Text("存储当前搜索状态?") }
+@@ -703,5 +703,5 @@ fun AnimatedVisibilityScope.GalleryListScreen(
+         }
+         // 恢复上次保存的搜索状态（旧版 Restore）
+-        onClick(Icons.Default.Restore) {
++        onClick(Icons.Default.History) {
+             launch {
+                 if (!LastSearch.hasSaved()) {
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryDetailContent.kt
+@@ -656,7 +656,9 @@ fun BelowHeader(galleryDetail: GalleryDetail, voteTag: VoteTag) {
+             text = "加入优先队列",
+             onClick = {
+-                runCatching { ExlClient.pqAdd("${galleryDetail.gid}_${galleryDetail.token}", "gallery") }
+-                    .onSuccess { snackbar("已加入下载优先队列") }
+-                    .onFailure { snackbar("加入失败：${it.message}") }
++                launch {
++                    runCatching { ExlClient.pqAdd("${galleryDetail.gid}_${galleryDetail.token}", "gallery") }
++                        .onSuccess { snackbar("已加入下载优先队列") }
++                        .onFailure { snackbar("加入失败：${it.message}") }
++                }
+             },
+         )
