@@ -1,0 +1,28 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/FeedSubScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/FeedSubScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/FeedSubScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/FeedSubScreen.kt
+@@ -216,4 +216,13 @@ fun AnimatedVisibilityScope.FeedSubScreen(navigator: DestinationsNavigator) = Sc
+                 ) {
+                     GalleryInfoListItem(
++                        onClick = { navigator.navigate(item.displayGid asDstWith item.displayToken) },
++                        onLongClick = {
++                            val series = SeriesKeyword.extract(item.title_jpn ?: item.title)
++                            if (series.isNotEmpty()) {
++                                navigator.navigate(
++                                    com.hippo.ehviewer.client.data.ListUrlBuilder().apply { keyword = series }.asDst()
++                                )
++                            }
++                        },
+                         info = info,
+                         showPages = true,
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/screen/GalleryListScreen.kt
+@@ -28,4 +28,7 @@ import androidx.compose.foundation.text.input.rememberTextFieldState
+ import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+ import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.filled.Bookmark
++import androidx.compose.material.icons.filled.History
++import com.hippo.ehviewer.client.LastSearch
+ import androidx.compose.material.icons.filled.Block
+ import androidx.compose.material.icons.filled.FilterAlt
