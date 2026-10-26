@@ -1,0 +1,61 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/MainActivity.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/MainActivity.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/MainActivity.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/MainActivity.kt
+@@ -47,4 +47,5 @@ import androidx.compose.foundation.rememberScrollState
+ import androidx.compose.foundation.verticalScroll
+ import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.filled.Subscriptions
+ import androidx.compose.material.icons.filled.Download
+ import androidx.compose.material.icons.filled.Favorite
+@@ -142,4 +143,5 @@ import com.hippo.ehviewer.ui.destinations.SubscriptionScreenDestination
+ import com.hippo.ehviewer.ui.destinations.ToplistScreenDestination
+ import com.hippo.ehviewer.ui.destinations.DownloadPriorityScreenDestination
++import com.hippo.ehviewer.ui.destinations.FeedSubScreenDestination
+ import com.hippo.ehviewer.ui.destinations.WatchFeedScreenDestination
+ import com.hippo.ehviewer.ui.destinations.WhatshotScreenDestination
+@@ -180,4 +182,5 @@ private val navItems = arrayOf<Triple<Direction, Int, ImageVector>>(
+     Triple(WhatshotScreenDestination, R.string.whats_hot, Icons.Default.Whatshot),
+     Triple(DownloadPriorityScreenDestination, R.string.priority_queue, Icons.Default.QueueMusic),
++    Triple(FeedSubScreenDestination, R.string.feed_sub, Icons.Default.Subscriptions),
+     Triple(WatchFeedScreenDestination, R.string.watch_list, Icons.Default.Star),
+     Triple(ToplistScreenDestination, R.string.toplist, Icons.Default.FormatListNumbered),
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
+@@ -184,9 +184,4 @@ fun AnimatedVisibilityScope.ExlSettingsScreen(navigator: DestinationsNavigator)
+             )
+ 
+-            SectionTitle("关注与订阅")
+-            Preference(title = "优先订阅", summary = "下载优先队列里标签类型抓取的新作品") {
+-                navigator.navigate(FeedSubScreenDestination())
+-            }
+-
+             SectionTitle("工具")
+             Preference(title = "任务中心", summary = "批量收藏等任务的进度 / 取消 / 排队") {
+diff --git a/core/i18n/src/commonMain/moko-resources/base/strings.xml b/core/i18n/src/commonMain/moko-resources/base/strings.xml
+--- a/core/i18n/src/commonMain/moko-resources/base/strings.xml
++++ b/core/i18n/src/commonMain/moko-resources/base/strings.xml
+@@ -34,4 +34,5 @@
+     <string name="whats_hot">What\'s hot</string>
+     <string name="priority_queue">Priority queue</string>
++    <string name="feed_sub">Priority feed</string>
+     <string name="favourite">Favourite</string>
+     <string name="history">History</string>
+diff --git a/core/i18n/src/commonMain/moko-resources/zh-rCN/strings.xml b/core/i18n/src/commonMain/moko-resources/zh-rCN/strings.xml
+--- a/core/i18n/src/commonMain/moko-resources/zh-rCN/strings.xml
++++ b/core/i18n/src/commonMain/moko-resources/zh-rCN/strings.xml
+@@ -20,4 +20,5 @@
+     <string name="whats_hot">热门</string>
+     <string name="priority_queue">优先队列</string>
++    <string name="feed_sub">优先订阅</string>
+     <string name="favourite">收藏</string>
+     <string name="history">历史</string>
+diff --git a/core/i18n/src/commonMain/moko-resources/zh-rHK/strings.xml b/core/i18n/src/commonMain/moko-resources/zh-rHK/strings.xml
+--- a/core/i18n/src/commonMain/moko-resources/zh-rHK/strings.xml
++++ b/core/i18n/src/commonMain/moko-resources/zh-rHK/strings.xml
+@@ -23,4 +23,5 @@
+     <string name="whats_hot">熱門</string>
+     <string name="priority_queue">優先隊列</string>
++    <string name="feed_sub">優先訂閱</string>
+     <string name="favourite">收藏</string>
+     <string name="history">歷史</string>
