@@ -1,0 +1,62 @@
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ExlPrefs.kt b/app/src/main/kotlin/com/hippo/ehviewer/ExlPrefs.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ExlPrefs.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ExlPrefs.kt
+@@ -19,4 +19,8 @@ object ExlPrefs : DataStorePreferences("exl_prefs") {
+     val hideFeedInList = boolPref("hide_feed_in_list", true)
+     val hideWatchInList = boolPref("hide_watch_in_list", false)
++    // ===== 旧版 [Self] 过滤相关（复用旧 prefs key，迁移后直接生效）=====
++    val hideFav = boolPref("hide_fav", true)
++    val disableFilter = boolPref("disable_filter", false)
++    val debugFilter = boolPref("debug_filter", false)
+ 
+     val hidePqInHistory = boolPref("hide_pq_in_history", false)
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt b/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/client/EhEngine.kt
+@@ -476,5 +476,7 @@ object EhEngine {
+     private suspend fun MutableList<BaseGalleryInfo>.fillInfo(url: String, filter: Boolean = false) = with(EhFilter) {
+         val initialCount = size
+-        if (filter) removeAllSuspend { filterTitle(it) || filterUploader(it) }
++        // 旧版 [Self] 禁用过滤：全局关闭本地过滤器（隐藏列表不受影响）
++        val enableFilter = !ExlPrefs.disableFilter.value
++        if (filter && enableFilter) removeAllSuspend { filterTitle(it) || filterUploader(it) }
+         // 隐藏列表独立于「过滤」开关，始终生效
+         removeAllSuspend { EhHideList.hide(it) }
+@@ -484,7 +486,7 @@ object EhEngine {
+         val needApi = filter && needTags() && !hasTags || Settings.showGalleryPages.value && !hasPages || hasRated
+         if (needApi) fillGalleryListByApi(this@fillInfo, url)
+-        if (filter) removeAllSuspend { filterUploader(it) || filterTag(it) || filterTagNamespace(it) || filterTagGroup(it) }
++        if (filter && enableFilter) removeAllSuspend { filterUploader(it) || filterTag(it) || filterTagNamespace(it) || filterTagGroup(it) }
+         // 隐藏已收藏（旧版 HideFav）：仅当本页条目 > 10 时生效，避免小列表被整页清空导致无法继续翻页
+-        if (filter && Settings.hideFav.value && initialCount > 10) {
++        if (filter && enableFilter && Settings.hideFav.value && initialCount > 10) {
+             removeAllSuspend { it.favoriteSlot != GalleryInfo.NOT_FAVORITED || EhDB.containLocalFavorites(it.gid) }
+         }
+@@ -506,4 +508,9 @@ object EhEngine {
+         // 整理模式（B6b）：页内按 [系列] / 画师 聚类重排
+         if (Settings.organizeMode.value) applyOrganizeClustering()
++        // 旧版 [Self] 显示过滤信息：提示本页被过滤掉多少条
++        val removed = initialCount - size
++        if (filter && ExlPrefs.debugFilter.value && removed > 0) {
++            showToastOnMainThread("过滤：本页隐藏 $removed 条（原始 $initialCount）")
++        }
+     }
+ 
+diff --git a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
+--- a/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
++++ b/app/src/main/kotlin/com/hippo/ehviewer/ui/settings/ExlSettingsScreen.kt
+@@ -112,4 +112,14 @@ fun AnimatedVisibilityScope.ExlSettingsScreen(navigator: DestinationsNavigator)
+             )
+ 
++            SwitchPreference(
++                title = "禁用过滤",
++                summary = "全局关闭本地过滤器（隐藏列表 / 关注仍生效）",
++                state = ExlPrefs.disableFilter.asMutableState(),
++            )
++            SwitchPreference(
++                title = "显示过滤信息",
++                summary = "过滤后提示被过滤的画廊数量",
++                state = ExlPrefs.debugFilter.asMutableState(),
++            )
+             SectionTitle("屏蔽与过滤")
+             Preference(title = "屏蔽规则（过滤）", summary = "标题 / 上传者 / 标签 / 复合标签 …") {
